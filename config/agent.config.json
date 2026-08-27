@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "agentName": "ADOFAI Agent",
+  "displaySettings": {
+    "showKeyDisplay": true,
+    "showKeyNames": true,
+    "showAnimations": true,
+    "displayX": 100,
+    "displayY": 100,
+    "fontSize": 24,
+    "opacity": 0.8
+  },
+  "keyCapture": {
+    "captureLeftClick": true,
+    "captureRightClick": true,
+    "captureSpace": true,
+    "captureArrowKeys": true
+  },
+  "logging": {
+    "enabled": true,
+    "logToFile": true,
+    "logLevel": "info"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "Releases": [
+    {
+      "Id": "ADOFAI.AgentKeyViewer",
+      "Version": "1.0.0",
+      "DownloadUrl": "https://github.com/adofaiex/ADOFAI.AgentKeyViewer/releases/latest/download/ADOFAI.AgentKeyViewer.zip",
+      "Changes": [
+        "Initial release",
+        "Real-time key display",
+        "Agent configuration integration"
+      ]
+    }
+  ]
+}

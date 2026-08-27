@@ -1,0 +1,19 @@
+/ai_20260824_182550 - 副本.txt
+
+# 构建产物
+[Bb]in/
+[Oo]bj/
+release/
+*.exe
+
+# 本地工具缓存
+tools/
+
+# NuGet
+*.nupkg
+
+# VS / IDE
+.vs/
+.vscode/
+*.user
+*.suo

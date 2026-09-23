@@ -163,7 +163,7 @@ namespace ADOFAI.AgentKeyViewer
         /// <summary>从当前 Mod 设置与布局导出</summary>
         public static KVConfig FromCurrent()
         {
-            var s = Main.Settings;
+            var s = CoreEntry.Settings;
             var c = new KVConfig
             {
                 layoutType = s.LayoutType,
@@ -197,7 +197,7 @@ namespace ADOFAI.AgentKeyViewer
                 keyImageFit = s.KeyImageFit,
             };
 
-            var layout = Main.DisplayRenderer?.CurrentLayout;
+            var layout = CoreEntry.DisplayRenderer?.CurrentLayout;
             if (layout != null)
             {
                 foreach (var k in layout) c.keys.Add(KVKeyConfig.FromKey(k));
@@ -208,7 +208,7 @@ namespace ADOFAI.AgentKeyViewer
         /// <summary>应用配置到当前 Mod 设置与布局</summary>
         public void ApplyTo()
         {
-            var s = Main.Settings;
+            var s = CoreEntry.Settings;
             if (s == null) return;
 
             // 数值安全化
@@ -266,8 +266,8 @@ namespace ADOFAI.AgentKeyViewer
             if (s.CustomKeys.Count == 0)
                 s.CustomKeys = new List<KeyDefinition>(KeyLayoutPresets.Create4KLayout());
 
-            Main.DisplayRenderer?.RebuildLayout();
-            Main.DisplayRenderer?.SyncCustomKeysToLayout();
+            CoreEntry.DisplayRenderer?.RebuildLayout();
+            CoreEntry.DisplayRenderer?.SyncCustomKeysToLayout();
         }
 
         public string ToJson() => JsonUtility.ToJson(this, true);
@@ -313,13 +313,13 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KVConfig] FromJson 失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KVConfig] FromJson 失败: {ex.Message}");
                 return null;
             }
         }
 
-        /// <summary>查找数组起始位置 [，跳过字符串值内的字符</summary>
-        private static int FindArrayStart(string json, int afterKeys)
+        /// <summary>查找数组起始位置 [，跳过字符串值内的字符（供 OvSpec 复用）</summary>
+        internal static int FindArrayStart(string json, int afterKeys)
         {
             bool inString = false;
             bool escaped = false;
@@ -334,8 +334,8 @@ namespace ADOFAI.AgentKeyViewer
             return -1;
         }
 
-        /// <summary>查找对象起始位置 {，跳过字符串值内的字符</summary>
-        private static int FindObjectStart(string json, int from, int limit)
+        /// <summary>查找对象起始位置 {，跳过字符串值内的字符（供 OvSpec 复用）</summary>
+        internal static int FindObjectStart(string json, int from, int limit)
         {
             bool inString = false;
             bool escaped = false;
@@ -350,8 +350,8 @@ namespace ADOFAI.AgentKeyViewer
             return -1;
         }
 
-        /// <summary>查找匹配的闭合括号，跳过字符串值内的字符</summary>
-        private static int FindMatchingBracket(string json, int openPos, char open, char close)
+        /// <summary>查找匹配的闭合括号，跳过字符串值内的字符（供 OvSpec 复用）</summary>
+        internal static int FindMatchingBracket(string json, int openPos, char open, char close)
         {
             bool inString = false;
             bool escaped = false;
@@ -456,7 +456,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KVConfig] 加载失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KVConfig] 加载失败: {ex.Message}");
             }
             return new KVConfigList();
         }
@@ -470,11 +470,11 @@ namespace ADOFAI.AgentKeyViewer
                 var wrapper = new KVConfigListWrapper { data = list };
                 string json = JsonUtility.ToJson(wrapper, true);
                 File.WriteAllText(path, json, System.Text.Encoding.UTF8);
-                Main.ModEntry?.Logger.Log($"[KVConfig] 已保存 {list.configs.Count} 个配置到: {path}");
+                CoreEntry.ModEntry?.Logger.Log($"[KVConfig] 已保存 {list.configs.Count} 个配置到: {path}");
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KVConfig] 保存失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KVConfig] 保存失败: {ex.Message}");
             }
         }
     }

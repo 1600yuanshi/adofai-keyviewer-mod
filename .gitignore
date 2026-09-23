@@ -17,3 +17,6 @@ tools/
 .vscode/
 *.user
 *.suo
+
+# 本地 AI 助手产物（计划文档等）
+.trae/

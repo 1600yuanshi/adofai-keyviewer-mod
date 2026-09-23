@@ -268,6 +268,48 @@ namespace ADOFAI.AgentKeyViewer
         }
 
         /// <summary>
+        /// 创建默认 16K 布局（两排各 8 键）：
+        ///   上排：Tab 1 2 E P = Backspace \
+        ///   下排：LShift LCtrl Space C Enter RShift , K
+        /// 键位与含义遵循社区默认 16K 约定，用户指定 4K/8K/12K 时按此居中节选。
+        /// </summary>
+        public static KeyDefinition[] Create16KLayout()
+        {
+            float keyW = 70, keyH = 70, gap = 8;
+            float row2Y = keyH + gap;
+
+            var upper = new (string Id, KeyCode Code, string Label)[]
+            {
+                ("TAB",       KeyCode.Tab,          "Tab"),
+                ("1",         KeyCode.Alpha1,       "1"),
+                ("2",         KeyCode.Alpha2,       "2"),
+                ("E",         KeyCode.E,            "E"),
+                ("P",         KeyCode.P,            "P"),
+                ("=",         KeyCode.Equals,       "="),
+                ("BACKSPACE", KeyCode.Backspace,    "Backspace"),
+                ("\\",        KeyCode.Backslash,    "\\"),
+            };
+            var lower = new (string Id, KeyCode Code, string Label)[]
+            {
+                ("LSHIFT",   KeyCode.LeftShift,     "LShift"),
+                ("LCTRL",    KeyCode.LeftControl,   "LCtrl"),
+                ("SPACE",    KeyCode.Space,         "Space"),
+                ("C",        KeyCode.C,             "C"),
+                ("ENTER",    KeyCode.Return,        "Enter"),
+                ("RSHIFT",   KeyCode.RightShift,    "RShift"),
+                (",",        KeyCode.Comma,         ","),
+                ("K",        KeyCode.K,             "K"),
+            };
+
+            var result = new KeyDefinition[upper.Length + lower.Length];
+            for (int i = 0; i < upper.Length; i++)
+                result[i] = new KeyDefinition(upper[i].Id, upper[i].Code, upper[i].Label, i * (keyW + gap), 0, keyW, keyH);
+            for (int i = 0; i < lower.Length; i++)
+                result[upper.Length + i] = new KeyDefinition(lower[i].Id, lower[i].Code, lower[i].Label, i * (keyW + gap), row2Y, keyW, keyH);
+            return result;
+        }
+
+        /// <summary>
         /// 添加鼠标按键到现有布局的右侧
         /// </summary>
         public static KeyDefinition[] WithMouseButtons(this KeyDefinition[] baseLayout, bool includeMouse = true)

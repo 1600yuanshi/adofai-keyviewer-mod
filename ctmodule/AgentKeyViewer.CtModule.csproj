@@ -1,0 +1,84 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CherryTools Sonnet 模块（可选组件）。
+
+    编译产物 CheryTools.AgentKeyViewer.dll 会被复制到 <CT>/Modules/，
+    由 CT 的 SonnetModuleLoader 自动发现（它扫描 Modules/*.dll 并实例化实现 ICheryModule 的类型）。
+
+    依赖：
+      - CT 安装目录需含 CheryTools.Sonnet.Contracts.dll 与 ImGui.NET.dll
+      - 主模组 ADOFAI.AgentKeyViewer.dll 需已安装（本模块复用其 WebUiServer/生成器）
+
+    用法：
+      dotnet build ctmodule\AgentKeyViewer.CtModule.csproj -c Release
+      如路径不同，用 -p:CTPath=... -p:ADOFAIPath=... 覆盖。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>CheryTools.AgentKeyViewer</AssemblyName>
+    <RootNamespace>ADOFAI.AgentKeyViewer.CtModule</RootNamespace>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ADOFAIPath)' == ''">
+    <ADOFAIPath Condition="Exists('C:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice')">C:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice</ADOFAIPath>
+    <ADOFAIPath Condition="Exists('D:\Steam\steamapps\common\A Dance of Fire and Ice')">D:\Steam\steamapps\common\A Dance of Fire and Ice</ADOFAIPath>
+    <ADOFAIPath Condition="Exists('E:\Steam\steamapps\common\A Dance of Fire and Ice')">E:\Steam\steamapps\common\A Dance of Fire and Ice</ADOFAIPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(CTPath)' == ''">
+    <CTPath>$(ADOFAIPath)\Mods\CheryTools</CTPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CT Sonnet 模块契约与 ImGui 绑定 -->
+    <Reference Include="CheryTools.Sonnet.Contracts">
+      <HintPath>$(CTPath)\CheryTools.Sonnet.Contracts.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>$(CTPath)\ImGui.NET.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- CT 随包提供，ImGui.NET 依赖 -->
+    <Reference Include="System.Numerics.Vectors">
+      <HintPath>$(CTPath)\System.Numerics.Vectors.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- UnityModManager（主模组 API 用到 ModEntry） -->
+    <Reference Include="UnityModManager">
+      <HintPath>$(ADOFAIPath)\A Dance of Fire and Ice_Data\Managed\UnityModManager\UnityModManager.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Unity -->
+    <Reference Include="UnityEngine">
+      <HintPath>$(ADOFAIPath)\A Dance of Fire and Ice_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ADOFAIPath)\A Dance of Fire and Ice_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- 引导器（提供 IAgentKeyViewerCore 契约与 BootstrapMain.Core 入口）。
+         刻意不引用核心程序集：核心可被热替换，直接绑定会指向旧实例。 -->
+    <Reference Include="ADOFAI.AgentKeyViewer">
+      <HintPath>$(MSBuildThisFileDirectory)..\bootstrap\bin\$(Configuration)\net48\ADOFAI.AgentKeyViewer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- 构建后复制到 CT 的 Modules 目录 -->
+  <Target Name="CopyToCtModules" AfterTargets="Build" Condition="Exists('$(CTPath)')">
+    <MakeDir Directories="$(CTPath)\Modules" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(CTPath)\Modules" />
+    <Message Importance="High" Text="Copied $(AssemblyName).dll to $(CTPath)\Modules" />
+  </Target>
+
+</Project>

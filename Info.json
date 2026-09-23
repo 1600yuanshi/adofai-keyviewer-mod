@@ -2,12 +2,12 @@
   "Id": "ADOFAI.AgentKeyViewer",
   "DisplayName": "Agent Key Viewer",
   "Author": "Agent Team",
-  "Version": "1.4.0",
+  "Version": "2.1.0",
   "ManagerVersion": "0.27.0",
   "Requirements": [],
   "LoadAfter": [],
   "AssemblyName": "ADOFAI.AgentKeyViewer.dll",
-  "EntryMethod": "ADOFAI.AgentKeyViewer.Main.Load",
+  "EntryMethod": "ADOFAI.AgentKeyViewer.Bootstrap.BootstrapMain.Load",
   "HomePage": "https://github.com/adofaiex",
   "Repository": "https://raw.githubusercontent.com/adofaiex/Repository/master/Repository.json"
 }

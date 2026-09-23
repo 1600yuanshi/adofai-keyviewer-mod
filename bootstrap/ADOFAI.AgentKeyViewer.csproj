@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    引导器（Bootstrap）—— UMM 入口程序集，产物为 ADOFAI.AgentKeyViewer.dll。
+
+    它只做三件事：
+      1. 注册 UMM 回调（OnToggle / OnGUI / OnSaveGUI）并转发给核心；
+      2. 用 Assembly.Load(字节) 加载/热替换核心程序集 AgentKeyViewer.Core.dll；
+      3. 每帧驱动核心的 Update / 游戏内 GUI。
+
+    设计约束：本程序集必须保持稳定且极小。它是被 UMM 一次性载入且无法卸载的，
+    因此「不改引导器就能升级全部功能」是热更新的前提；一旦改动本程序集，
+    仍需重启游戏才能生效。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ADOFAI.AgentKeyViewer</AssemblyName>
+    <RootNamespace>ADOFAI.AgentKeyViewer.Bootstrap</RootNamespace>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ADOFAIPath)' == ''">
+    <ADOFAIPath Condition="Exists('C:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice')">C:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice</ADOFAIPath>
+    <ADOFAIPath Condition="Exists('D:\Steam\steamapps\common\A Dance of Fire and Ice')">D:\Steam\steamapps\common\A Dance of Fire and Ice</ADOFAIPath>
+    <ADOFAIPath Condition="Exists('E:\Steam\steamapps\common\A Dance of Fire and Ice')">E:\Steam\steamapps\common\A Dance of Fire and Ice</ADOFAIPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(ADOFAIPath)\A Dance of Fire and Ice_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ADOFAIPath)\A Dance of Fire and Ice_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityModManager">
+      <HintPath>$(ADOFAIPath)\A Dance of Fire and Ice_Data\Managed\UnityModManager\UnityModManager.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- 构建后把引导器 + 元数据复制到 Mods（核心程序集由核心工程自行复制） -->
+  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(ADOFAIPath)' != ''">
+    <MakeDir Directories="$(ADOFAIPath)\Mods\ADOFAI.AgentKeyViewer" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ADOFAIPath)\Mods\ADOFAI.AgentKeyViewer" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\Info.json" DestinationFolder="$(ADOFAIPath)\Mods\ADOFAI.AgentKeyViewer" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)..\Repository.json" DestinationFolder="$(ADOFAIPath)\Mods\ADOFAI.AgentKeyViewer" />
+    <Message Importance="High" Text="已复制引导器与 Info.json 到 Mods 目录" />
+  </Target>
+
+</Project>

@@ -124,6 +124,20 @@ namespace ADOFAI.AgentKeyViewer
         /// <summary>生成配置时关闭模型思考（对推理模型有效，避免输出思维链）</summary>
         public bool DisableThinking = true;
 
+        // ===== WebUI（取代 UMM IMGUI 面板作为主要操作界面）=====
+        /// <summary>启用本地 WebUI 服务</summary>
+        public bool WebUiEnabled = true;
+        /// <summary>WebUI 监听端口（仅回环地址；被占用时自动顺延）</summary>
+        public int WebUiPort = 8765;
+        /// <summary>游戏启动后自动打开浏览器进入 WebUI</summary>
+        public bool AutoOpenWebUi = false;
+
+        // ===== 生成选项（与 WebUI / UMM 面板同步）=====
+        /// <summary>生成模式：0=AI 输出 JSON 规格由代码构建 XML（推荐）；1=AI 直写 XML</summary>
+        public int GenMode = 0;
+        /// <summary>目标格式：0=Sonnet 新格式；1=旧格式</summary>
+        public int TargetFormat = 0;
+
         public override void Save(UnityModManager.ModEntry modEntry)
         {
             Save(this, modEntry);

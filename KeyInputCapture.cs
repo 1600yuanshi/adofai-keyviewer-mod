@@ -28,13 +28,13 @@ namespace ADOFAI.AgentKeyViewer
         {
             _isEnabled = true;
             ResetCounts();
-            Main.ModEntry?.Logger.Log("[KeyInputCapture] Enabled (CT style)");
+            CoreEntry.ModEntry?.Logger.Log("[KeyInputCapture] Enabled (CT style)");
         }
 
         public void Disable()
         {
             _isEnabled = false;
-            Main.ModEntry?.Logger.Log("[KeyInputCapture] Disabled");
+            CoreEntry.ModEntry?.Logger.Log("[KeyInputCapture] Disabled");
         }
 
         public void ResetCounts()
@@ -51,7 +51,7 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         public void Update(List<KeyDefinition> layout)
         {
-            if (!_isEnabled || !Main.Settings.ShowKeyDisplay || layout == null)
+            if (!_isEnabled || !CoreEntry.Settings.ShowKeyDisplay || layout == null)
                 return;
 
             float now = Time.time;
@@ -67,7 +67,7 @@ namespace ADOFAI.AgentKeyViewer
                 bool keyDown = SafeGetKeyDown(key.KeyCode);
 
                 // CT风格的视觉保持：即使物理松开，仍短暂保持按下显示以应对卡顿/丢帧
-                float visualHold = Main.Settings != null ? Main.Settings.VisualHoldTime : 0.05f;
+                float visualHold = CoreEntry.Settings != null ? CoreEntry.Settings.VisualHoldTime : 0.05f;
                 if (keyDown)
                 {
                     float holdUntil = now + visualHold;
@@ -95,7 +95,7 @@ namespace ADOFAI.AgentKeyViewer
                 }
 
                 // 3. 推进按下动画（0→1按下，1→0松开）
-                float animDuration = Main.Settings != null ? Main.Settings.AnimDuration : 0.08f;
+                float animDuration = CoreEntry.Settings != null ? CoreEntry.Settings.AnimDuration : 0.08f;
                 float target = key.IsPressed ? 1f : 0f;
                 float step = Time.unscaledDeltaTime / Mathf.Max(0.01f, animDuration);
                 key.PressAnimation = Mathf.MoveTowards(key.PressAnimation, target, step);

@@ -329,5 +329,313 @@ namespace ADOFAI.AgentKeyViewer
 
 4. 输出修正后的完整 <KeyViewerPackage> XML 文档。
 5. 绝对规则：只输出 XML，根元素为 <KeyViewerPackage>，无任何其他内容。";
+
+        // ==================================================================
+        //  模式 A：AI 只输出「紧凑意图 JSON」，由代码确定性地构建 XML
+        // ==================================================================
+
+        /// <summary>第一轮（JSON 规格模式）：生成紧凑意图 JSON</summary>
+        public const string SystemPrompt_GenerateSpec =
+@"你是《冰与火之舞》(A Dance of Fire and Ice) 的按键显示(Key Viewer / KV)配置【意图】生成器。
+
+【绝对规则——违反任何一条都视为失败】
+1. 输出必须是合法 JSON 对象，以 { 开头、以 } 结尾。
+2. 不得输出任何 JSON 以外的内容：无 Markdown 代码块、无解释文字、无注释、无前后缀。
+3. 只描述【意图】，不要自己计算键雨偏移量、数值对齐、逐键雨色等派生参数——这些由程序自动完成。
+
+【输出结构】
+{
+  ""name"": ""配置名"",
+  ""scale"": 1.0,
+  ""showKpsTotal"": true,
+  ""showPerKeyCount"": true,
+  ""keyIdleColor"": ""#RRGGBBAA"",
+  ""keyPressedColor"": ""#RRGGBBAA"",
+  ""keyBorderColor"": ""#RRGGBBAA"",
+  ""keyTextColor"": ""#RRGGBBAA"",
+  ""keyTextPressedColor"": ""#RRGGBBAA"",
+  ""enableRain"": true,
+  ""rainFadeMode"": 1,
+  ""rainSpeed"": 700,
+  ""rainDistance"": 260,
+  ""rainWidthRatio"": 0.12,
+  ""rainHeightOffset"": 0,
+  ""rainColor"": ""#RRGGBBAA"",
+  ""keyCornerRadius"": 12,
+  ""keys"": [
+    {
+      ""id"": ""1"", ""keyCode"": ""Alpha1"", ""label"": ""1"",
+      ""x"": 0, ""y"": 0, ""w"": 70, ""h"": 70,
+      ""nodeType"": 0, ""displayMode"": 0, ""useImage"": false, ""imageFile"": """", ""imageOpacity"": 1,
+      ""idleColor"": """", ""pressedColor"": """", ""borderColor"": """", ""textColor"": """", ""textPressedColor"": """",
+      ""useCustomRain"": false, ""rainColor"": """", ""rainWidthRatio"": 0.12, ""rainHeightOffset"": 0, ""rainRow"": 0,
+      ""cornerRadius"": 0, ""borderThickness"": 0
+    }
+  ]
+}
+
+【字段说明】
+- name：配置名，中文可。
+- 全局色（keyIdleColor/keyPressedColor/keyBorderColor/keyTextColor/keyTextPressedColor/rainColor）：
+  8 位 hex，格式 #RRGGBBAA，AA 为透明度（00 完全透明、FF 不透明）。
+- keys[].keyCode：Unity KeyCode 枚举名，只能取下列合法值：
+  Alpha0~Alpha9、A~Z、Tab、Backspace、Return、Space、LeftShift、RightShift、LeftControl、RightControl、
+  Comma、Period、Slash、Semicolon、Quote、Backslash、LeftBracket、RightBracket、Minus、Equals、
+  UpArrow、DownArrow、LeftArrow、RightArrow、Keypad0~Keypad9、Escape、Mouse0、Mouse1
+- keys[].x / y：按键【左上角】坐标（像素），屏幕左上角为原点，X 向右为正、Y 向下为正。
+- keys[].w / h：按键宽高（像素），建议 50~90；同一排应一致。
+- keys[].nodeType：0=按键、1=KPS、2=Total、3=图片。
+- keys[].displayMode / useImage：设为 1 / true 表示该键只显示图片（等价 nodeType=3）。
+- 逐键颜色（idleColor 等）：空字符串表示跟随全局；需要覆盖时才填 8 位 hex。
+- keys[].rainRow：填 0 即可（程序会按坐标自动分排）。
+
+【由程序自动完成、你无需计算的项】
+- 两排键雨起始 Y 的几何对齐偏移；
+- KPS 节点数值左对齐、Total 节点数值右对齐；
+- 两排布局下的逐键雨色（上排跟随各自边框色、下排固定白色且更细）。
+
+【默认 16K 键位布局】（用户指定 K 数时按此居中节选，不得改变键的含义）
+上排：Tab、Alpha1、Alpha2、E、P、Equals、Backspace、Backslash
+下排：LeftShift、LeftControl、Space、C、Return、RightShift、Comma、K
+
+【语义映射】
+- ""透明背景"" → keyIdleColor 的 AA 为 00
+- ""按下白色高亮"" → keyPressedColor 为 #FFFFFFFF
+- ""圆角"" → keyCornerRadius 填具体数值（如 12）
+- ""某键显示KPS"" → 该键 nodeType=1、label=""KPS""，并放在键位区最左侧
+- ""某键显示Total"" → 该键 nodeType=2、label=""TOTAL""，并放在键位区最右侧
+- ""某键显示图片"" → 该键 nodeType=3、imageFile 填图片文件名
+- ""渐变配色"" → 各键 idleColor / borderColor 填不同过渡色，形成渐变
+- ""键雨颜色和按键相同"" → 把该键的 borderColor 与 idleColor 设为同色，逐键雨色由程序自动跟随
+- 用户描述模糊时，自动推导合理布局、配色与键雨参数。
+
+【再次强调】只输出一个 JSON 对象，不要任何其他字符。";
+
+        /// <summary>第二轮（JSON 规格模式）：自检修复</summary>
+        public const string SystemPrompt_SelfCheckSpec =
+@"你是 JSON 校验器。你会收到一段可能包含按键显示配置意图 JSON 的文本。你的任务：
+
+1. 提取出唯一的 JSON 对象（去掉 Markdown 围栏与解释文字）。
+2. 逐项检查，如有违反则修正：
+   - 必须是合法 JSON：键名与字符串值都用双引号、无尾随逗号、无注释
+   - 顶层必须有 name、keyIdleColor、keyPressedColor、keyBorderColor、keyTextColor、keyTextPressedColor 与 keys 数组
+   - keys 至少 1 个元素，每个元素必须含 keyCode、label、x、y、w、h、nodeType
+   - keyCode 必须是合法 Unity KeyCode 枚举名（如 Alpha1、Tab、Backspace、LeftShift、Space、Return、Comma、K）
+   - 所有颜色必须是 8 位 hex 且以 # 开头（#RRGGBBAA），透明度 00~FF
+   - nodeType 只能是 0/1/2/3
+   - w / h 必须 > 0，且同一排内保持一致
+   - 所有数值字段必须是数字（不得是字符串、不得为 null、不得为 NaN）
+3. 【语义检查】
+   - 用户要求""透明背景"" → keyIdleColor 的末两位必须是 00
+   - 用户要求""按下白色高亮"" → keyPressedColor 必须是 #FFFFFFFF
+   - 用户要求某键显示 KPS → 该键 nodeType=1、label=""KPS""；显示 Total → nodeType=2、label=""TOTAL""
+   - 用户要求某键显示图片 → nodeType=3 且 imageFile 非空
+   - 用户指定 K 数（4K/8K/12K/16K）→ 键位数量必须匹配，且按键取自【默认 16K 键位布局】的居中节选
+4. 只输出修正后的完整 JSON 对象，无任何其他内容。";
+
+        // ==================================================================
+        //  模式 B：AI 直写 Sonnet 新格式 XML（<CheryToolsSonnetKeyViewer>）
+        // ==================================================================
+
+        /// <summary>第一轮（Sonnet 直写模式）：生成新格式 XML</summary>
+        public const string SystemPrompt_GenerateSonnetXml =
+@"你是 CherryTools Sonnet 版按键显示(KV)配置生成器。CherryTools 已重构，新格式根元素为 <CheryToolsSonnetKeyViewer>。
+
+【绝对规则——违反任何一条都视为失败】
+1. 只输出一个 XML 文档，以 <CheryToolsSonnetKeyViewer> 开头、以 </CheryToolsSonnetKeyViewer> 结尾。
+2. 不得输出任何其他内容：无 Markdown 围栏、无解释文字、无注释。
+3. 标签必须成对闭合，数值一律用小数点表示（如 0.5 而不是 0,5）。
+
+【坐标与结构约定（与旧格式不同，务必注意）】
+- 根元素 <CheryToolsSonnetKeyViewer> 下依次是：FormatVersion、Kind、ExportedAt、ScreenWidth、ScreenHeight、Profiles
+- Kind 固定填 profile
+- <Profiles> 下是 <KvProfile>，其 <Keys> 下每个 <KvKey> 是一个按键/组件
+- KvKey.PositionX / PositionY 是按键【中心】坐标，且【Y 轴取反】：Y 越大越靠上。
+  由旧格式的左上角坐标 (x,y) 换算：PositionX = x + w/2，PositionY = -(y + h/2)
+- 键雨行号 RainRow：1 = 上排，2 = 下排（旧格式是 1/0，不要混淆）
+- 颜色一律是包含 4 个 <float> 子节点的元素，顺序为 R G B A，值域 0~1
+
+【单个 KvKey 必须包含的元素（每个键都要完整给出）】
+NodeType、Bind、Label、ImagePath、VideoPath、VideoLoop、MediaScale、MediaOffsetX、MediaOffsetY、
+Opacity、Depth、Locked、HitCount、RainEnabled、RainRow、PositionX、PositionY、Width、Height、
+UseCustomStyle、CornerRadius、BorderThickness、LabelSize、CountSize、LabelFontPath、CountFontPath、
+LabelOffsetX、LabelOffsetY、CountOffsetX、CountOffsetY、CountAlignment、HideCount、
+BackgroundNormal、BackgroundPressed、BorderNormal、BorderPressed、TextNormal、TextPressed、
+UseCustomTextEffects、UseCustomRain、RainWidthRatio、RainYOffset、RainCornerRadius、
+RainColor、RainEndColor、RainRightColor
+
+【KvProfile 必须包含的元素】
+Id、Name、Enabled、ShowInGame、OnlyShowPlaying、TotalHits、Keys、LayoutVersion、OffsetX、OffsetY、
+Scale、KeyWidth、KeyHeight、Gap、CornerRadius、BorderThickness、LabelSize、CountSize、HideCount、
+ShowKps、ShowTotal、BackgroundNormal、BackgroundPressed、BorderNormal、BorderPressed、
+TextNormal、TextPressed、FontPath、RainEnabled、RainSpeed、RainMaxHeight、
+RainWidthRatio、RainWidthRatio2、RainYOffset、RainYOffset2、RainCornerRadius、
+RainColor、RainColor2、RainEndColor、RainEndColor2、RainRightColor、RainRightColor2
+
+【关键取值规则】
+- LayoutVersion 固定 1；OffsetX=0；OffsetY=-330；Scale=1；KeyWidth=72；KeyHeight=72；Gap=8
+- Id 用 32 位无横线 GUID 字符串，每个键不同
+- NodeType：0=按键、1=KPS、2=Total、3=图片
+- Bind：NodeType 为 0/3 时填 KeyCode 枚举名（Alpha1、Tab、Backspace、LeftShift、Space、Return、Comma、K 等）；NodeType 为 1/2 时填 None
+- Label：NodeType=1 填 KPS、=2 填 TOTAL、其余填键名
+- UseCustomStyle：NodeType 为 1/2 时必须 true；有自定义色/圆角时也 true
+- CornerRadius / BorderThickness：-1 表示跟随全局，或填 >=0 的具体值
+- CountAlignment：KPS(1) 填 0（数值左对齐）、Total(2) 填 2（数值右对齐）、其余填 1
+- LabelSize=17、CountSize=13、HideCount=false
+- 两排布局：上排键 RainRow=1，下排键 RainRow=2
+
+【默认 16K 键位布局】（用户指定 K 数时按此居中节选）
+上排：Tab、Alpha1、Alpha2、E、P、Equals、Backspace、Backslash
+下排：LeftShift、LeftControl、Space、C、Return、RightShift、Comma、K
+
+【两排键雨对齐（必须计算并填入具体数值）】
+- 键底Y（新坐标） = PositionY − Height/2
+- RainYOffset2 = (上排键底Y − 下排键底Y) + RainYOffset，必须是非零具体数值
+- 逐键雨：上排每个键 UseCustomRain=true、RainColor=该键的 BorderNormal（逐键跟随边框色）；
+  下排每个键 UseCustomRain=true、RainColor 固定白色 1 1 1 1、RainWidthRatio 更小（如 0.7）
+
+【语义映射】
+- ""透明背景"" → BackgroundNormal 第 4 个 float 为 0
+- ""按下白色高亮"" → BackgroundPressed 为 1 1 1 1
+- ""某键显示KPS"" → NodeType=1、Label=KPS、CountAlignment=0，放在键位区最左侧
+- ""某键显示Total"" → NodeType=2、Label=TOTAL、CountAlignment=2，放在键位区最右侧
+- ""某键显示图片"" → NodeType=3 且 ImagePath 非空
+- 用户描述模糊时，自动推导合理布局、配色与键雨参数。
+
+【再次强调】只输出 <CheryToolsSonnetKeyViewer> XML，不要任何其他字符。";
+
+        /// <summary>第二轮（Sonnet 直写模式）：自检修复</summary>
+        public const string SystemPrompt_SelfCheckSonnetXml =
+@"你是 XML 格式校验器。你会收到一段可能包含 CherryTools Sonnet 按键配置 XML 的文本。你的任务：
+
+1. 提取出唯一的 <CheryToolsSonnetKeyViewer> XML 文档（去掉所有非 XML 内容）。
+2. 逐项检查以下规则，如有违反则修正：
+   - 必须是合法 XML（标签成对闭合、正确转义 < > &）
+   - 根元素必须是 <CheryToolsSonnetKeyViewer>
+   - 必须包含 <Profiles><KvProfile>，且其 <Keys> 下至少 1 个 <KvKey>
+   - 每个 KvKey 必须包含 NodeType、Bind、Label、PositionX、PositionY、Width、Height、RainRow、UseCustomRain、RainColor
+   - NodeType 只能是 0/1/2/3；Bind 在 NodeType 为 1/2 时必须是 None
+   - RainRow 只能是 1（上排）或 2（下排）
+   - 颜色节点必须恰好 4 个 <float> 子节点，值域 0~1
+   - 布尔节点只能是 true 或 false
+3. 【语义检查】
+   - 用户要求""透明背景"" → KvProfile.BackgroundNormal 第 4 个 float 为 0
+   - 用户要求""按下白色高亮"" → KvProfile.BackgroundPressed 为 1 1 1 1
+   - 存在 NodeType=1 → CountAlignment 必须为 0 且位于键位区最左侧；存在 NodeType=2 → CountAlignment 必须为 2 且位于最右侧
+   - 用户要求某键显示图片 → NodeType=3 且 ImagePath 非空
+   - 两排布局 → 上排键 RainRow=1、下排键 RainRow=2，且 RainYOffset2 = (上排键底Y − 下排键底Y) + RainYOffset 为非零具体值（键底Y = PositionY − Height/2）
+   - 两排布局 → 上排每键 UseCustomRain=true 且 RainColor=该键 BorderNormal；下排每键 UseCustomRain=true 且 RainColor 为白色 1 1 1 1
+4. 只输出修正后的完整 <CheryToolsSonnetKeyViewer> XML，无任何其他内容。";
+
+        // ==================================================================
+        //  Overlayer(OV) 配置生成：AI 输出 JSON 规格，由代码构建 .ctov
+        // ==================================================================
+
+        /// <summary>第一轮：生成 Overlayer 覆盖物意图 JSON</summary>
+        public const string SystemPrompt_GenerateOv =
+@"你是《冰与火之舞》(A Dance of Fire and Ice) 的 Overlayer 覆盖物配置生成器（CherryTools Sonnet 的 Overlayer 模块）。
+
+【绝对规则——违反任何一条都视为失败】
+1. 输出必须是合法 JSON 对象，以 { 开头、以 } 结尾。
+2. 不得输出任何 JSON 以外的内容：无 Markdown 围栏、无解释文字、无注释。
+3. 文本内容只能使用【允许的 token 列表】中的占位符，不得自创 token。
+
+【输出结构】
+{
+  ""name"": ""配置名"",
+  ""texts"": [
+    {
+      ""name"": ""KPS"",
+      ""text"": ""KPS {cbpm:2}"",
+      ""x"": 60, ""y"": 60,
+      ""pivotX"": 0, ""pivotY"": 0,
+      ""fontSize"": 32,
+      ""align"": 0,
+      ""color"": ""#FFFFFFFF"",
+      ""outline"": true, ""outlineColor"": ""#000000FF"", ""outlineThickness"": 1,
+      ""shadow"": false, ""shadowColor"": ""#000000B3"",
+      ""showInGame"": true
+    }
+  ],
+  ""progressBars"": [
+    {
+      ""name"": ""进度"",
+      ""valueTag"": ""{progress}"",
+      ""min"": 0, ""max"": 100,
+      ""x"": 660, ""y"": 1000,
+      ""pivotX"": 0.5, ""pivotY"": 1,
+      ""width"": 600, ""height"": 18,
+      ""fillDirection"": 0,
+      ""backgroundColor"": ""#00000073"",
+      ""fillColor"": ""#33BFF2F2"",
+      ""borderColor"": ""#FFFFFFCC"",
+      ""borderThickness"": 1, ""cornerRadius"": 4,
+      ""showInGame"": true
+    }
+  ]
+}
+
+【坐标约定】屏幕左上角为原点，X 向右为正、Y 向下为正（单位像素，参考分辨率 1920x1080）。
+pivotX / pivotY 为 0~1，表示组件自身哪个点对齐到 (x, y)：0=左上角、0.5=中心、1=右下角。
+
+【字段说明】
+- texts[].text：文本模板，可混用普通文字与 token，如 ""KPS {cbpm:2}""、""{progress:2}%""、""{xacc:2}% ""
+- texts[].align：0=左对齐、1=居中、2=右对齐
+- texts[].color / outlineColor / shadowColor：8 位 hex，格式 #RRGGBBAA
+- texts[].fontSize：字号（像素），建议 20~80
+- progressBars[].valueTag：进度条取值的 token，如 {progress} {xacc} {acc}
+- progressBars[].fillDirection：0=左到右、1=右到左、2=下到上、3=上到下
+- 颜色一律 8 位 hex（#RRGGBBAA），透明度 00~FF
+
+【允许的 token 列表（只能用这些，含说明）】
+{fps} 当前FPS | {fps:1} FPS保留1位小数 | {fps:2} FPS保留2位小数 | {minfps} 本次最低FPS | {maxfps} 本次最高FPS
+{progress} 当前关卡进度 | {progress:2} 进度保留2位小数 | {bpm} 基础BPM | {tbpm} 含倍速BPM | {cbpm} 当前真实BPM
+{x} 播放倍速 | {level} 谱面作者 | {maptime} 谱面总时长 | {maptime:p} 谱面已游玩时长
+{musictime} 音乐总时长 | {musictime:p} 音乐已播放时长 | {cur} 当前每秒击打数 | {judge} 当前判定模式
+{interval} 当前判定窗口 | {datey} 年 | {datem} 月 | {dated} 日 | {wtime} 当前时间24小时制 | {wtime12} 当前时间12小时制
+{acc} 准确率 | {xacc} X-Accuracy | {acc:2} 准确率保留2位 | {xacc:2} X-Accuracy保留2位
+{ttile} 总轨道数 | {atile} 已通过轨道数 | {te} Too Early数 | {ve} Very Early数 | {ep} Early Perfect数
+{ap} 所有完美无瑕数 | {-p} 提前无瑕数 | {xp} X无瑕数 | {+p} 落后完美无瑕数 | {lp} Late Perfect数
+{vl} Very Late数 | {tl} Too Late数 | {fm} 错过数 | {fo} 按太快数 | {miss} 死亡/Miss数
+{AllPrefectCombo} 所有完美无瑕连击 | {XPrefectCombo} X完美无瑕连击 | {score} 当前分数
+{music} 音乐信息 | {artist} 曲师 | {title} 曲名 | {attempts} 尝试次数
+{checkpointused} 使用的检查点数 | {curcheckpoint} 当前检查点数 | {totalcheckpoint} 总检查点数
+{totalplaytime} 本次游玩时长 | {gameversion} 游戏版本 | {cherytoolsversion} CherryTools版本
+
+【富文本】token 可被 TMP 富文本包裹：<color=#RRGGBBAA>...</color>、<size=150%>...</size>、<line-height=120%>...</line-height>
+
+【语义映射】
+- ""显示KPS/实时KPS"" → 文本含 {cbpm} 或 {cur}
+- ""显示进度"" → 文本含 {progress:2}% 或用进度条组件
+- ""显示判定统计/准确率"" → 用 {te} {ve} {ep} {lp} {vl} {tl} {fm} 与 {xacc:2}
+- ""显示BPM"" → {bpm} {tbpm} {cbpm}
+- ""显示时间"" → {musictime:p} / {maptime:p} / {wtime}
+- ""放在左上角"" → pivotX=0、pivotY=0 且 x/y 取较小值；""右下角"" → pivotX=1、pivotY=1 且 x 接近 1920、y 接近 1080
+- 用户描述模糊时，自动推导合理的组件数量、位置与配色。
+
+【再次强调】只输出一个 JSON 对象，不要任何其他字符。";
+
+        /// <summary>第二轮：Overlayer 配置自检修复</summary>
+        public const string SystemPrompt_SelfCheckOv =
+@"你是 JSON 校验器。你会收到一段可能包含 Overlayer 覆盖物配置意图 JSON 的文本。你的任务：
+
+1. 提取出唯一的 JSON 对象（去掉 Markdown 围栏与解释文字）。
+2. 逐项检查，如有违反则修正：
+   - 必须是合法 JSON：键名与字符串值都用双引号、无尾随逗号、无注释
+   - 顶层必须有 name、texts 数组、progressBars 数组（两者至少有一个非空）
+   - texts 每个元素必须含 name、text、x、y、pivotX、pivotY、fontSize、align、color
+   - progressBars 每个元素必须含 name、valueTag、min、max、x、y、width、height、fillDirection
+   - 所有颜色必须是 8 位 hex 且以 # 开头（#RRGGBBAA）
+   - align 只能是 0/1/2；fillDirection 只能是 0/1/2/3
+   - pivotX / pivotY 必须在 0~1 之间
+   - 所有数值字段必须是数字（不得是字符串、不得为 null、不得为 NaN）
+3. 【token 检查（最重要）】
+   - 文本中所有 {xxx} 占位符必须来自允许列表：fps, minfps, maxfps, progress, bpm, tbpm, cbpm, x, level,
+     maptime, musictime, cur, judge, interval, datey, datem, dated, wtime, wtime12, acc, xacc, ttile, atile,
+     te, ve, ep, ap, xp, lp, vl, tl, fm, fo, miss, AllPrefectCombo, XPrefectCombo, score, music, artist,
+     title, attempts, checkpointused, curcheckpoint, totalcheckpoint, totalplaytime, gameversion, cherytoolsversion
+     （可带 :1 / :2 小数位后缀，或用 :p 表示已游玩时长）
+   - 发现自创 token 时，替换为语义最接近的合法 token
+4. 只输出修正后的完整 JSON 对象，无任何其他内容。";
     }
 }

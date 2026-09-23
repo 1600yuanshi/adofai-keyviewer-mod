@@ -29,7 +29,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[GifDecoder] 解码失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[GifDecoder] 解码失败: {ex.Message}");
                 return null;
             }
         }

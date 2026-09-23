@@ -90,10 +90,10 @@ namespace ADOFAI.AgentKeyViewer
         {
             string gameDir = ModPathHelper.GetGameDir(modEntry);
             string configDir = Path.Combine(gameDir, "AgentKeyViewer_config");
-            Main.ModEntry?.Logger.Log($"[AIConfig] GetPath -> gameDir='{gameDir}', configDir='{configDir}'");
-            try { if (!Directory.Exists(configDir)) Directory.CreateDirectory(configDir); } catch (Exception ex) { Main.ModEntry?.Logger.Error($"[AIConfig] 创建目录失败: {ex.Message}"); }
+            CoreEntry.ModEntry?.Logger.Log($"[AIConfig] GetPath -> gameDir='{gameDir}', configDir='{configDir}'");
+            try { if (!Directory.Exists(configDir)) Directory.CreateDirectory(configDir); } catch (Exception ex) { CoreEntry.ModEntry?.Logger.Error($"[AIConfig] 创建目录失败: {ex.Message}"); }
             string path = Path.Combine(configDir, "apikeys.json");
-            Main.ModEntry?.Logger.Log($"[AIConfig] GetPath -> '{path}'");
+            CoreEntry.ModEntry?.Logger.Log($"[AIConfig] GetPath -> '{path}'");
             return path;
         }
 
@@ -112,7 +112,7 @@ namespace ADOFAI.AgentKeyViewer
                     {
                         list = old;
                         Save(path, list);
-                        Main.ModEntry?.Logger.Log($"[AIConfig] 已从历史位置迁移密钥: {legacy}");
+                        CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 已从历史位置迁移密钥: {legacy}");
                     }
                 }
             }
@@ -132,7 +132,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[AIConfig] 密钥加载失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[AIConfig] 密钥加载失败: {ex.Message}");
             }
             return new ApiKeyList();
         }
@@ -313,11 +313,11 @@ namespace ADOFAI.AgentKeyViewer
                 var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 File.WriteAllText(path, BuildApiKeyJson(list), Encoding.UTF8);
-                Main.ModEntry?.Logger.Log($"[AIConfig] 密钥已保存: {path} ({list.keys.Count}个)");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 密钥已保存: {path} ({list.keys.Count}个)");
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[AIConfig] 密钥保存失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[AIConfig] 密钥保存失败: {ex.Message}");
             }
         }
 
@@ -425,7 +425,7 @@ namespace ADOFAI.AgentKeyViewer
                     if (!string.IsNullOrEmpty(gameRoot))
                     {
                         _cachedGameDir = gameRoot;
-                        Main.ModEntry?.Logger.Log($"[Path] 游戏根目录(modEntry): '{_cachedGameDir}'");
+                        CoreEntry.ModEntry?.Logger.Log($"[Path] 游戏根目录(modEntry): '{_cachedGameDir}'");
                         return _cachedGameDir;
                     }
                 }
@@ -446,7 +446,7 @@ namespace ADOFAI.AgentKeyViewer
                     if (!string.IsNullOrEmpty(gameRoot2))
                     {
                         _cachedGameDir = gameRoot2;
-                        Main.ModEntry?.Logger.Log($"[Path] 游戏根目录(Application): '{_cachedGameDir}'");
+                        CoreEntry.ModEntry?.Logger.Log($"[Path] 游戏根目录(Application): '{_cachedGameDir}'");
                         return _cachedGameDir;
                     }
                 }
@@ -460,7 +460,7 @@ namespace ADOFAI.AgentKeyViewer
                 if (proc?.MainModule != null)
                 {
                     _cachedGameDir = Path.GetDirectoryName(proc.MainModule.FileName);
-                    Main.ModEntry?.Logger.Log($"[Path] 游戏根目录(Process): '{_cachedGameDir}'");
+                    CoreEntry.ModEntry?.Logger.Log($"[Path] 游戏根目录(Process): '{_cachedGameDir}'");
                     return _cachedGameDir;
                 }
             }
@@ -475,13 +475,13 @@ namespace ADOFAI.AgentKeyViewer
             {
                 _cachedGameDir = ".";
             }
-            Main.ModEntry?.Logger.Log($"[Path] 游戏根目录(回退): '{_cachedGameDir}'");
+            CoreEntry.ModEntry?.Logger.Log($"[Path] 游戏根目录(回退): '{_cachedGameDir}'");
             return _cachedGameDir;
         }
 
         public static string GetGameDir()
         {
-            return GetGameDir(Main.ModEntry);
+            return GetGameDir(CoreEntry.ModEntry);
         }
     }
 
@@ -490,15 +490,38 @@ namespace ADOFAI.AgentKeyViewer
     {
         public enum GenState { Idle, Busy, Success, Failed }
 
+        /// <summary>生成模式：Spec=AI 只输出紧凑意图 JSON，由代码构建 XML；DirectXml=AI 直写 XML</summary>
+        public enum GenMode { Spec, DirectXml }
+
+        /// <summary>目标格式：Sonnet=CT 重构版新格式；Legacy=旧版格式</summary>
+        public enum GenTarget { Sonnet, Legacy }
+
+        /// <summary>生成任务：Kv=按键显示配置；Ov=Overlayer 覆盖物配置</summary>
+        public enum GenJob { Kv, Ov }
+
         public GenState State { get; private set; } = GenState.Idle;
         public string Error { get; private set; }
         public string RawOutput { get; private set; }
-        /// <summary>AI 直出的 CT KeyViewerPackage XML（纯 .ctkv 生成器模式）</summary>
+        /// <summary>AI 直出的 CT KV XML（纯 .ctkv 生成器模式）</summary>
         public string CtkvXml { get; private set; }
         /// <summary>已保存的 .ctkv 文件完整路径（未保存则为 null）</summary>
         public string SavedCtkvPath { get; private set; }
         public ApiKeyEntry ActiveKey { get; set; }
         public string UserPrompt { get; set; }
+
+        /// <summary>本次生成使用的工作模式</summary>
+        public GenMode Mode { get; set; } = GenMode.Spec;
+        /// <summary>本次生成的目标格式</summary>
+        public GenTarget Target { get; set; } = GenTarget.Sonnet;
+        /// <summary>本次生成的任务类型</summary>
+        public GenJob Job { get; set; } = GenJob.Kv;
+
+        /// <summary>规格模式下解析出的 KV 意图（可直接再导出为新/旧格式）</summary>
+        public KVConfig ParsedConfig { get; private set; }
+        /// <summary>Overlayer 生成结果包</summary>
+        public OvTransferPackage OvPackage { get; private set; }
+        /// <summary>已保存的 .ctov 文件完整路径（未保存则为 null）</summary>
+        public string SavedOvPath { get; private set; }
 
         private Task<string> _task;
         public bool IsBusy => _task != null && !_task.IsCompleted;
@@ -514,7 +537,9 @@ namespace ADOFAI.AgentKeyViewer
             if (string.IsNullOrWhiteSpace(UserPrompt))
             {
                 State = GenState.Failed;
-                Error = "请先用自然语言描述你想要的按键显示配置。";
+                Error = Job == GenJob.Ov
+                    ? "请先用自然语言描述你想要的 Overlayer 覆盖物。"
+                    : "请先用自然语言描述你想要的按键显示配置。";
                 return;
             }
 
@@ -522,11 +547,40 @@ namespace ADOFAI.AgentKeyViewer
             Error = null;
             CtkvXml = null;
             SavedCtkvPath = null;
+            SavedOvPath = null;
             RawOutput = null;
+            ParsedConfig = null;
+            OvPackage = null;
 
             var key = ActiveKey;
             var prompt = UserPrompt;
-            _task = Task.Run(() => TwoRoundGenerate(key, prompt));
+            var job = Job;
+            var mode = Mode;
+            var target = Target;
+            _task = Task.Run(() => RunGenerate(key, prompt, job, mode, target));
+        }
+
+        /// <summary>按任务类型与模式选择提示词与校验器，执行两轮生成（提示词走 PromptStore，支持热重载）</summary>
+        private static string RunGenerate(ApiKeyEntry key, string userPrompt, GenJob job, GenMode mode, GenTarget target)
+        {
+            if (job == GenJob.Ov)
+                return TwoRoundGenerate(key, userPrompt,
+                    PromptStore.Get(PromptStore.GenerateOv), PromptStore.Get(PromptStore.SelfCheckOv),
+                    "Overlayer 配置 JSON 对象", NormalizeJson, ValidateOvJson);
+
+            if (mode == GenMode.Spec)
+                return TwoRoundGenerate(key, userPrompt,
+                    PromptStore.Get(PromptStore.GenerateSpec), PromptStore.Get(PromptStore.SelfCheckSpec),
+                    "配置意图 JSON 对象", NormalizeJson, ValidateSpecJson);
+
+            if (target == GenTarget.Sonnet)
+                return TwoRoundGenerate(key, userPrompt,
+                    PromptStore.Get(PromptStore.GenerateSonnetXml), PromptStore.Get(PromptStore.SelfCheckSonnetXml),
+                    "<CheryToolsSonnetKeyViewer> XML", NormalizeXml, ValidateSonnetXml);
+
+            return TwoRoundGenerate(key, userPrompt,
+                PromptStore.Get(PromptStore.GenerateCtkv), PromptStore.Get(PromptStore.SelfCheckCtkv),
+                "<KeyViewerPackage> XML", NormalizeXml, ValidateLegacyXml);
         }
 
         public void Tick()
@@ -534,32 +588,89 @@ namespace ADOFAI.AgentKeyViewer
             if (_task == null) return;
             if (!_task.IsCompleted) return;
 
+            var job = Job;
+            var mode = Mode;
+            var target = Target;
             try
             {
-                RawOutput = NormalizeXml(_task.Result);
-                Main.ModEntry?.Logger.Log($"[AIConfig] Tick: RawOutput 长度={RawOutput?.Length ?? 0}");
-                // 校验 AI 输出是否为合法的 CT KeyViewerPackage XML
+                string text = _task.Result;
+
+                // ---- Overlayer：解析意图 JSON 并构建 .ctov 包 ----
+                if (job == GenJob.Ov)
+                {
+                    RawOutput = NormalizeJson(text);
+                    CoreEntry.ModEntry?.Logger.Log($"[AIConfig] Tick(OV): RawOutput 长度={RawOutput?.Length ?? 0}");
+                    var spec = OvSpec.FromAiJson(RawOutput);
+                    if (OvSpecBuilder.Validate(spec, out int ovCount, out string ovError))
+                    {
+                        OvPackage = OvSpecBuilder.BuildPackage(spec);
+                        CtkvXml = CtKvIo.SerializeOvPackage(OvPackage);
+                        State = GenState.Success;
+                        CoreEntry.ModEntry?.Logger.Log($"[AIConfig] Tick(OV): 解析成功，{ovCount} 个组件");
+                    }
+                    else
+                    {
+                        FailWith("Overlayer 配置校验失败: " + ovError,
+                                 "AI 返回的内容不是有效的 Overlayer 配置 JSON。请查看 logs/ 目录下的日志文件了解详情。");
+                    }
+                    return;
+                }
+
+                // ---- 规格模式：解析意图 JSON，由代码构建 XML ----
+                if (mode == GenMode.Spec)
+                {
+                    RawOutput = NormalizeJson(text);
+                    CoreEntry.ModEntry?.Logger.Log($"[AIConfig] Tick(Spec): RawOutput 长度={RawOutput?.Length ?? 0}");
+                    var cfg = KVConfig.FromAiJson(RawOutput);
+                    if (cfg != null && cfg.keys != null && cfg.keys.Count > 0)
+                    {
+                        ParsedConfig = cfg;
+                        CtkvXml = target == GenTarget.Sonnet
+                            ? KvSpecBuilder.BuildSonnetXml(cfg)
+                            : KvSpecBuilder.BuildLegacyXml(cfg);
+                        State = GenState.Success;
+                        CoreEntry.ModEntry?.Logger.Log($"[AIConfig] Tick(Spec): 构建成功，{cfg.keys.Count} 个键，目标格式={target}");
+                    }
+                    else
+                    {
+                        FailWith("配置意图 JSON 解析失败（缺少 keys 数组或格式错误）",
+                                 "AI 返回的内容不是有效的配置意图 JSON。请查看 logs/ 目录下的日志文件了解详情。");
+                    }
+                    return;
+                }
+
+                // ---- AI 直写 XML 模式 ----
+                RawOutput = NormalizeXml(text);
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] Tick(DirectXml): RawOutput 长度={RawOutput?.Length ?? 0}");
                 if (CtKvIo.ValidateGeneratedXml(RawOutput, out int keyCount, out string configName, out string xmlError))
                 {
-                    // 程序化兜底：两排布局的键雨对齐参数由代码强制修正（AI 经常漏算）
-                    RawOutput = CtKvIo.FixTwoRowRainLayout(RawOutput);
-                    CtkvXml = RawOutput;
+                    if (RawOutput.IndexOf("<CheryToolsSonnetKeyViewer", StringComparison.Ordinal) >= 0)
+                    {
+                        // Sonnet 新格式：反序列化为对象后做键雨兜底，再重新序列化
+                        var pkg = CtKvIo.ParseSonnetXml(RawOutput, out string parseErr);
+                        if (pkg != null)
+                        {
+                            CtKvIo.FixSonnetRainLayout(pkg);
+                            CtkvXml = CtKvIo.SerializeSonnetPackage(pkg);
+                        }
+                        else
+                        {
+                            CoreEntry.ModEntry?.Logger.Log($"[AIConfig] Sonnet 反序列化失败，按原文保存: {parseErr}");
+                            CtkvXml = RawOutput;
+                        }
+                    }
+                    else
+                    {
+                        // 旧格式：沿用 XML 打补丁方式做键雨兜底
+                        CtkvXml = CtKvIo.FixTwoRowRainLayout(RawOutput);
+                    }
                     State = GenState.Success;
-                    Main.ModEntry?.Logger.Log($"[AIConfig] Tick: XML 校验成功，{keyCount} 个键，配置「{configName}」");
+                    CoreEntry.ModEntry?.Logger.Log($"[AIConfig] Tick(DirectXml): 校验成功，{keyCount} 个键，配置「{configName}」");
                 }
                 else
                 {
-                    State = GenState.Failed;
-                    var failLog = new AiLogEntry
-                    {
-                        timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                        userPrompt = UserPrompt ?? "",
-                        round2Extracted = Truncate(RawOutput, 3000),
-                        error = "XML 校验失败: " + xmlError + "。RawOutput 前500字符: " + Truncate(RawOutput, 500),
-                        success = false
-                    };
-                    WriteLog(failLog);
-                    Error = "AI 返回的内容不是有效的 CT KeyViewerPackage XML。请查看 logs/ 目录下的日志文件了解详情。";
+                    FailWith("XML 校验失败: " + xmlError,
+                             "AI 返回的内容不是有效的 CT KV XML。请查看 logs/ 目录下的日志文件了解详情。");
                 }
             }
             catch (Exception ex)
@@ -567,22 +678,84 @@ namespace ADOFAI.AgentKeyViewer
                 State = GenState.Failed;
                 Error = ex.Message;
                 CtkvXml = null;
-                Main.ModEntry?.Logger.Error($"[AIConfig] Tick 异常: {ex.GetType().Name}: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[AIConfig] Tick 异常: {ex.GetType().Name}: {ex.Message}");
             }
-            _task = null;
+            finally
+            {
+                _task = null;
+            }
         }
 
-        /// <summary>把当前 AI 生成的 XML 直出保存为 .ctkv，返回文件路径（失败返回 null）。</summary>
+        /// <summary>统一记录失败日志并设置错误状态</summary>
+        private void FailWith(string logError, string userMessage)
+        {
+            State = GenState.Failed;
+            CtkvXml = null;
+            var failLog = new AiLogEntry
+            {
+                timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                userPrompt = UserPrompt ?? "",
+                round2Extracted = Truncate(RawOutput, 3000),
+                error = logError + "。RawOutput 前500字符: " + Truncate(RawOutput, 500),
+                success = false
+            };
+            WriteLog(failLog);
+            Error = userMessage;
+        }
+
+        /// <summary>保存生成结果：规格模式按目标格式重新构建，直写模式按原 XML 保存</summary>
         public string SaveAsCtkv(string fileName, out string error)
         {
             error = "";
+            if (Job == GenJob.Ov)
+            {
+                error = "当前是 Overlayer 生成结果，请改用保存 .ctov";
+                return null;
+            }
+            if (Mode == GenMode.Spec && ParsedConfig != null)
+            {
+                SavedCtkvPath = Target == GenTarget.Sonnet
+                    ? CtKvIo.SaveSonnetCtkvFromConfig(ParsedConfig, fileName, CoreEntry.ModEntry, out error)
+                    : CtKvIo.SaveLegacyCtkvFromConfig(ParsedConfig, fileName, CoreEntry.ModEntry, out error);
+                return SavedCtkvPath;
+            }
             if (string.IsNullOrEmpty(CtkvXml))
             {
                 error = "当前没有可保存的 AI 生成结果";
                 return null;
             }
-            SavedCtkvPath = CtKvIo.SaveGeneratedCtkv(CtkvXml, fileName, Main.ModEntry, out error);
+            SavedCtkvPath = Target == GenTarget.Sonnet
+                ? CtKvIo.SaveSonnetCtkvFromXml(CtkvXml, fileName, CoreEntry.ModEntry, out error)
+                : CtKvIo.SaveGeneratedCtkv(CtkvXml, fileName, CoreEntry.ModEntry, out error);
             return SavedCtkvPath;
+        }
+
+        /// <summary>把当前 Overlayer 生成结果保存为 .ctov，返回文件路径（失败返回 null）</summary>
+        public string SaveAsOv(string fileName, out string error)
+        {
+            error = "";
+            if (OvPackage == null)
+            {
+                error = "当前没有可保存的 Overlayer 生成结果";
+                return null;
+            }
+            SavedOvPath = CtKvIo.SaveOvPackage(OvPackage, fileName, CoreEntry.ModEntry, out error);
+            return SavedOvPath;
+        }
+
+        /// <summary>
+        /// 把当前 Overlayer 生成结果导出为 CT 的 Overlayer 设置文件（绕过 CT 导入 Bug）。
+        /// 用户需在关闭游戏后把该文件覆盖到 CT 的 Modules/CheryTools.Overlayer.Preview.xml。
+        /// </summary>
+        public string SaveAsOvSettings(string fileName, out string error)
+        {
+            error = "";
+            if (OvPackage == null)
+            {
+                error = "当前没有可保存的 Overlayer 生成结果";
+                return null;
+            }
+            return CtKvIo.SaveOvSettingsFile(OvPackage, fileName, CoreEntry.ModEntry, out error);
         }
 
         public void Reset()
@@ -592,12 +765,52 @@ namespace ADOFAI.AgentKeyViewer
             Error = null;
             CtkvXml = null;
             SavedCtkvPath = null;
+            SavedOvPath = null;
             RawOutput = null;
+            ParsedConfig = null;
+            OvPackage = null;
+        }
+
+        // ==================== 校验器（返回 null 表示通过，否则返回错误信息）====================
+
+        private static string ValidateLegacyXml(string xml)
+        {
+            if (CtKvIo.ValidateGeneratedXml(xml, out _, out _, out string err)) return null;
+            return err;
+        }
+
+        private static string ValidateSonnetXml(string xml)
+        {
+            if (string.IsNullOrWhiteSpace(xml)) return "内容为空";
+            if (CtKvIo.ParseSonnetXml(xml, out string parseErr) == null) return parseErr;
+            if (CtKvIo.ValidateGeneratedXml(xml, out _, out _, out string err)) return null;
+            return err;
+        }
+
+        private static string ValidateSpecJson(string json)
+        {
+            var cfg = KVConfig.FromAiJson(json);
+            if (cfg == null) return "无法解析为配置意图 JSON（JSON 格式错误或缺少 keys 数组）";
+            if (cfg.keys == null || cfg.keys.Count == 0) return "keys 数组为空";
+            return null;
+        }
+
+        private static string ValidateOvJson(string json)
+        {
+            var spec = OvSpec.FromAiJson(json);
+            if (OvSpecBuilder.Validate(spec, out _, out string err)) return null;
+            return err;
         }
 
         // ==================== 两轮对话 ====================
 
-        private string TwoRoundGenerate(ApiKeyEntry key, string userPrompt)
+        /// <summary>
+        /// 通用两轮对话：第一轮生成 → 校验通过即返回；否则第二轮把具体错误回灌给模型修复。
+        /// 通过 normalize/validate 回调适配四种产出（旧格式 XML / Sonnet XML / KV 意图 JSON / OV 意图 JSON）。
+        /// </summary>
+        private static string TwoRoundGenerate(ApiKeyEntry key, string userPrompt,
+            string systemPromptGenerate, string systemPromptSelfCheck, string expectedForm,
+            Func<string, string> normalize, Func<string, string> validate)
         {
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
             string url = BuildChatCompletionsUrl(key.baseUrl);
@@ -612,27 +825,27 @@ namespace ADOFAI.AgentKeyViewer
             {
                 // 记录游戏目录（方便排查路径问题）
                 string gameDir = ModPathHelper.GetGameDir();
-                Main.ModEntry?.Logger.Log($"[AIConfig] 游戏目录: {gameDir}");
-                Main.ModEntry?.Logger.Log($"[AIConfig] API URL: {url}");
-                Main.ModEntry?.Logger.Log($"[AIConfig] 模型: {key.model}");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 游戏目录: {gameDir}");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] API URL: {url}");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 模型: {key.model}  期望产出: {expectedForm}");
 
-                // ---- 第一轮：生成（CT .ctkv XML）----
+                // ---- 第一轮：生成 ----
                 // 实时按 baseUrl 匹配预设取参数，预设改动无需重新添加密钥即生效
                 ProviderPreset preset = null;
                 if (!string.IsNullOrEmpty(key.baseUrl))
                 {
                     string kb = key.baseUrl.TrimEnd('/');
-                    foreach (var p in ProviderPresets.List)
+                    foreach (var p in PresetStore.All)
                         if (!string.IsNullOrEmpty(p.baseUrl) && p.baseUrl.TrimEnd('/') == kb) { preset = p; break; }
                 }
                 int maxTokens = preset != null ? preset.maxTokens : key.maxTokens;
-                string thinkingDisableJson = (Main.Settings != null && Main.Settings.DisableThinking)
+                string thinkingDisableJson = (CoreEntry.Settings != null && CoreEntry.Settings.DisableThinking)
                     ? (preset != null ? preset.thinkingDisableJson : key.thinkingDisableJson)
                     : "";
-                string body1 = BuildChatBody(key.model, PromptTemplate.SystemPrompt_GenerateCtkv, userPrompt, thinkingDisableJson, maxTokens);
+                string body1 = BuildChatBody(key.model, systemPromptGenerate, userPrompt, thinkingDisableJson, maxTokens);
                 string raw1 = HttpPostJson(url, body1, key.apiKey);
                 log.round1Raw = Truncate(raw1, 2000);
-                Main.ModEntry?.Logger.Log($"[AIConfig] 第一轮响应长度: {raw1?.Length ?? 0}");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 第一轮响应长度: {raw1?.Length ?? 0}");
                 LogCacheMetrics(raw1, key.model);
 
                 string text1 = ExtractContent(raw1);
@@ -646,25 +859,25 @@ namespace ADOFAI.AgentKeyViewer
                     throw new Exception("第一轮生成返回为空，请查看日志");
                 }
 
-                // 若第一轮的 XML 已有效，直接采用，避免第二轮重复输出导致的截断与额外开销
-                string norm1 = NormalizeXml(text1);
-                if (CtKvIo.ValidateGeneratedXml(norm1, out int k1, out string c1, out _))
+                // 若第一轮产出已有效，直接采用，避免第二轮重复输出导致的截断与额外开销
+                string norm1 = normalize(text1);
+                string err1 = validate(norm1);
+                if (err1 == null)
                 {
-                    Main.ModEntry?.Logger.Log($"[AIConfig] 第一轮 XML 已有效（{k1} 键，{c1}），跳过第二轮");
+                    CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 第一轮产出已有效（{expectedForm}），跳过第二轮");
                     log.success = true;
                     WriteLog(log);
                     return norm1;
                 }
 
                 // ---- 第二轮：仅当第一轮无效时，作为"修复器"给出具体错误并让其修正 ----
-                CtKvIo.ValidateGeneratedXml(norm1, out _, out _, out string err1);
                 string selfCheckPrompt = "用户的原始需求描述：\n" + userPrompt +
-                    "\n\n以下AI生成的CT按键配置XML未能通过校验，错误信息：\n" + err1 +
-                    "\n\n请修复并输出完整的 <KeyViewerPackage> XML。务必：标签全部成对闭合、颜色用单个元素包含 4 个 <float> 子节点（不得用重复标签）、输出必须完整不要截断。\n\n" + norm1;
-                string body2 = BuildChatBody(key.model, PromptTemplate.SystemPrompt_SelfCheckCtkv, selfCheckPrompt, thinkingDisableJson, maxTokens);
+                    "\n\n以下AI生成的" + expectedForm + "未能通过校验，错误信息：\n" + err1 +
+                    "\n\n请修复并输出完整的" + expectedForm + "。务必：标签/括号全部成对闭合、颜色用单个元素包含 4 个 <float> 子节点（不得用重复标签）、输出必须完整不要截断。\n\n" + norm1;
+                string body2 = BuildChatBody(key.model, systemPromptSelfCheck, selfCheckPrompt, thinkingDisableJson, maxTokens);
                 string raw2 = HttpPostJson(url, body2, key.apiKey);
                 log.round2Raw = Truncate(raw2, 2000);
-                Main.ModEntry?.Logger.Log($"[AIConfig] 第二轮响应长度: {raw2?.Length ?? 0}");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 第二轮响应长度: {raw2?.Length ?? 0}");
 
                 string text2 = ExtractContent(raw2);
                 log.round2Extracted = Truncate(text2, 2000);
@@ -679,7 +892,7 @@ namespace ADOFAI.AgentKeyViewer
 
                 log.success = true;
                 WriteLog(log);
-                return NormalizeXml(text2);
+                return normalize(text2);
             }
             catch (Exception ex)
             {
@@ -769,8 +982,9 @@ namespace ADOFAI.AgentKeyViewer
                     text = text.Substring(contentStart + 1, fenceEnd - contentStart - 1);
             }
 
-            // 2) 定位到根元素，去掉前置说明文字
-            int root = text.IndexOf("<KeyViewerPackage");
+            // 2) 定位到根元素，去掉前置说明文字（新旧两种根元素都支持）
+            int root = text.IndexOf("<CheryToolsSonnetKeyViewer");
+            if (root < 0) root = text.IndexOf("<KeyViewerPackage");
             if (root < 0) root = text.IndexOf('<');
             if (root >= 0)
             {
@@ -781,6 +995,27 @@ namespace ADOFAI.AgentKeyViewer
                     text = text.Substring(0, lastClose + 1);
             }
 
+            return text.Trim();
+        }
+
+        /// <summary>从 AI 输出中提取最外层 JSON 对象（剥离 markdown 围栏与说明文字）</summary>
+        private static string NormalizeJson(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            int fenceStart = text.IndexOf("```");
+            if (fenceStart >= 0)
+            {
+                int contentStart = text.IndexOf('\n', fenceStart);
+                if (contentStart < 0) contentStart = fenceStart + 3;
+                int fenceEnd = text.LastIndexOf("```");
+                if (fenceEnd > contentStart)
+                    text = text.Substring(contentStart + 1, fenceEnd - contentStart - 1);
+            }
+
+            int start = text.IndexOf('{');
+            int end = text.LastIndexOf('}');
+            if (start >= 0 && end > start) text = text.Substring(start, end - start + 1);
             return text.Trim();
         }
 
@@ -795,7 +1030,7 @@ namespace ADOFAI.AgentKeyViewer
                 if (hit + miss > 0)
                 {
                     double rate = 100.0 * hit / (hit + miss);
-                    Main.ModEntry?.Logger.Log($"[AIConfig] [{model}] prompt缓存命中={hit} 未命中={miss} 命中率={rate:F1}%");
+                    CoreEntry.ModEntry?.Logger.Log($"[AIConfig] [{model}] prompt缓存命中={hit} 未命中={miss} 命中率={rate:F1}%");
                 }
             }
             catch { }
@@ -873,18 +1108,18 @@ namespace ADOFAI.AgentKeyViewer
         {
             string gameDir = ModPathHelper.GetGameDir();
             string dir = Path.Combine(gameDir, "AgentKeyViewer_config", "logs");
-            Main.ModEntry?.Logger.Log($"[AIConfig] GetLogDir -> '{dir}'");
+            CoreEntry.ModEntry?.Logger.Log($"[AIConfig] GetLogDir -> '{dir}'");
             try
             {
                 if (!Directory.Exists(dir))
                 {
                     Directory.CreateDirectory(dir);
-                    Main.ModEntry?.Logger.Log($"[AIConfig] 创建日志目录: '{dir}'");
+                    CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 创建日志目录: '{dir}'");
                 }
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[AIConfig] 创建日志目录失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[AIConfig] 创建日志目录失败: {ex.Message}");
             }
             return dir;
         }
@@ -896,14 +1131,14 @@ namespace ADOFAI.AgentKeyViewer
                 string dir = GetLogDir();
                 string file = Path.Combine(dir, "ai_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json");
                 string json = JsonUtility.ToJson(log, true);
-                Main.ModEntry?.Logger.Log($"[AIConfig] 写入日志: '{file}' (内容长度: {json?.Length ?? 0})");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 写入日志: '{file}' (内容长度: {json?.Length ?? 0})");
                 File.WriteAllText(file, json, Encoding.UTF8);
-                Main.ModEntry?.Logger.Log($"[AIConfig] 日志已保存: {file}");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 日志已保存: {file}");
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[AIConfig] 日志保存失败: {ex.GetType().Name}: {ex.Message}");
-                Main.ModEntry?.Logger.Error($"[AIConfig] 堆栈: {ex.StackTrace}");
+                CoreEntry.ModEntry?.Logger.Error($"[AIConfig] 日志保存失败: {ex.GetType().Name}: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[AIConfig] 堆栈: {ex.StackTrace}");
             }
         }
 

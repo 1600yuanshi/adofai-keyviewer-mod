@@ -106,18 +106,18 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         public void SyncFromModSettings()
         {
-            if (Main.Settings == null) return;
+            if (CoreEntry.Settings == null) return;
 
-            _config.displaySettings.showKeyDisplay = Main.Settings.ShowKeyDisplay;
-            _config.displaySettings.displayX = Main.Settings.DisplayX;
-            _config.displaySettings.displayY = Main.Settings.DisplayY;
-            _config.displaySettings.opacity = Main.Settings.Opacity;
-            _config.displaySettings.showKpsTotal = Main.Settings.ShowKpsTotal;
+            _config.displaySettings.showKeyDisplay = CoreEntry.Settings.ShowKeyDisplay;
+            _config.displaySettings.displayX = CoreEntry.Settings.DisplayX;
+            _config.displaySettings.displayY = CoreEntry.Settings.DisplayY;
+            _config.displaySettings.opacity = CoreEntry.Settings.Opacity;
+            _config.displaySettings.showKpsTotal = CoreEntry.Settings.ShowKpsTotal;
 
-            _config.keyCapture.layoutType = Main.Settings.LayoutType;
-            _config.keyCapture.includeMouse = Main.Settings.IncludeMouse;
-            _config.keyCapture.captureLeftClick = Main.Settings.IncludeMouse;
-            _config.keyCapture.captureRightClick = Main.Settings.IncludeMouse;
+            _config.keyCapture.layoutType = CoreEntry.Settings.LayoutType;
+            _config.keyCapture.includeMouse = CoreEntry.Settings.IncludeMouse;
+            _config.keyCapture.captureLeftClick = CoreEntry.Settings.IncludeMouse;
+            _config.keyCapture.captureRightClick = CoreEntry.Settings.IncludeMouse;
 
             Save();
         }
@@ -127,16 +127,16 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         public void SyncToModSettings()
         {
-            if (Main.Settings == null) return;
+            if (CoreEntry.Settings == null) return;
 
-            Main.Settings.ShowKeyDisplay = _config.displaySettings.showKeyDisplay;
-            Main.Settings.DisplayX = _config.displaySettings.displayX;
-            Main.Settings.DisplayY = _config.displaySettings.displayY;
-            Main.Settings.Opacity = _config.displaySettings.opacity;
-            Main.Settings.ShowKpsTotal = _config.displaySettings.showKpsTotal;
+            CoreEntry.Settings.ShowKeyDisplay = _config.displaySettings.showKeyDisplay;
+            CoreEntry.Settings.DisplayX = _config.displaySettings.displayX;
+            CoreEntry.Settings.DisplayY = _config.displaySettings.displayY;
+            CoreEntry.Settings.Opacity = _config.displaySettings.opacity;
+            CoreEntry.Settings.ShowKpsTotal = _config.displaySettings.showKpsTotal;
 
-            Main.Settings.LayoutType = _config.keyCapture.layoutType;
-            Main.Settings.IncludeMouse = _config.keyCapture.includeMouse;
+            CoreEntry.Settings.LayoutType = _config.keyCapture.layoutType;
+            CoreEntry.Settings.IncludeMouse = _config.keyCapture.includeMouse;
         }
 
         /// <summary>

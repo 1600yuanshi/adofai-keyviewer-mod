@@ -1,9 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    核心（Core）—— 全部功能逻辑，产物为 AgentKeyViewer.Core.dll。
+    它是可热替换的部分：由引导器用 Assembly.Load(字节) 加载，替换磁盘文件后
+    可在游戏内直接切换到新版本，无需重启游戏。
+  -->
+
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>ADOFAI.AgentKeyViewer</AssemblyName>
+    <AssemblyName>AgentKeyViewer.Core</AssemblyName>
     <RootNamespace>ADOFAI.AgentKeyViewer</RootNamespace>
     <Nullable>enable</Nullable>
     <Deterministic>true</Deterministic>
@@ -20,9 +26,18 @@
   <ItemGroup>
     <!-- ct_decomp 仅为反编译参考文件，不参与编译 -->
     <Compile Remove="ct_decomp\**\*.cs" />
+    <!-- ctmodule 为独立的 CT Sonnet 模块工程，由 ctmodule\AgentKeyViewer.CtModule.csproj 单独编译 -->
+    <Compile Remove="ctmodule\**\*.cs" />
+    <!-- bootstrap 为独立的引导器工程，由 bootstrap\ADOFAI.AgentKeyViewer.csproj 单独编译 -->
+    <Compile Remove="bootstrap\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 引导器（提供 IAgentKeyViewerCore 契约）。由引导器在运行时先行加载，故不复制到输出目录 -->
+    <ProjectReference Include="bootstrap\ADOFAI.AgentKeyViewer.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+
     <!-- Unity Engine References -->
     <Reference Include="UnityEngine">
       <HintPath>$(ADOFAIPath)\A Dance of Fire and Ice_Data\Managed\UnityEngine.dll</HintPath>
@@ -81,13 +96,11 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Copy to Mods folder on build -->
+  <!-- Copy core to Mods folder on build (引导器与 Info.json 由引导器工程负责复制) -->
   <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(ADOFAIPath)' != ''">
-    <MakeDir Directories="$(ADOFAIPath)\Mods\$(AssemblyName)" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ADOFAIPath)\Mods\$(AssemblyName)" />
-    <Copy SourceFiles="Info.json" DestinationFolder="$(ADOFAIPath)\Mods\$(AssemblyName)" />
-    <Copy SourceFiles="Repository.json" DestinationFolder="$(ADOFAIPath)\Mods\$(AssemblyName)" />
-    <Message Importance="High" Text="Copied $(AssemblyName) to Mods folder" />
+    <MakeDir Directories="$(ADOFAIPath)\Mods\$(RootNamespace)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ADOFAIPath)\Mods\ADOFAI.AgentKeyViewer" />
+    <Message Importance="High" Text="已复制核心程序集 $(AssemblyName).dll 到 Mods 目录" />
   </Target>
 
 </Project>

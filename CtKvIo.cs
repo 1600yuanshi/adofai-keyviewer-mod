@@ -173,7 +173,7 @@ namespace ADOFAI.AgentKeyViewer
             catch (Exception ex)
             {
                 error = ex.Message;
-                Main.ModEntry?.Logger.Error($"[CtKvIo] 导入失败 {filePath}: {ex}");
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 导入失败 {filePath}: {ex}");
                 return null;
             }
         }
@@ -198,13 +198,13 @@ namespace ADOFAI.AgentKeyViewer
                     WriteEntry(zip, "KeyViewer.xml", settingsDoc);
                     WriteEntry(zip, "PackageInfo.xml", infoDoc);
                 }
-                Main.ModEntry?.Logger.Log($"[CtKvIo] 已导出 CT KV 包: {filePath}（{cfg.keys.Count} 键）");
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 已导出 CT KV 包: {filePath}（{cfg.keys.Count} 键）");
                 return true;
             }
             catch (Exception ex)
             {
                 error = ex.Message;
-                Main.ModEntry?.Logger.Error($"[CtKvIo] 导出失败 {filePath}: {ex}");
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 导出失败 {filePath}: {ex}");
                 return false;
             }
         }
@@ -213,7 +213,12 @@ namespace ADOFAI.AgentKeyViewer
         //  直出：将 AI 生成的 CT XML 封装为 .ctkv 包（纯生成器模式）
         // ====================================================================
 
-        /// <summary>校验 AI 输出的 XML 是否为合法的 CT KeyViewerPackage，并返回 (是否有效, 键数, 配置名, 错误)</summary>
+        /// <summary>
+        /// 校验 AI 输出的 XML 是否为合法的 CT KV 配置包，并返回 (是否有效, 键数, 配置名, 错误)。
+        /// 同时接受两种根元素：
+        ///   - 旧格式 &lt;KeyViewerPackage&gt;（KeyViewerConfigurations/KVConfiguration/Nodes/KVNode）
+        ///   - Sonnet 新格式 &lt;CheryToolsSonnetKeyViewer&gt;（Profiles/KvProfile/Keys/KvKey）
+        /// </summary>
         public static bool ValidateGeneratedXml(string xml, out int keyCount, out string configName, out string error)
         {
             keyCount = 0;
@@ -228,9 +233,12 @@ namespace ADOFAI.AgentKeyViewer
                 }
                 var doc = new XmlDocument();
                 doc.LoadXml(xml);
-                if (doc.DocumentElement == null || doc.DocumentElement.Name != "KeyViewerPackage")
+                string root = doc.DocumentElement?.Name ?? "";
+                if (root == "CheryToolsSonnetKeyViewer")
+                    return ValidateSonnetDocument(doc, out keyCount, out configName, out error);
+                if (root != "KeyViewerPackage")
                 {
-                    error = "根元素不是 <KeyViewerPackage>";
+                    error = $"根元素不是 <KeyViewerPackage> 或 <CheryToolsSonnetKeyViewer>（实际为 <{root}>）";
                     return false;
                 }
                 var configs = doc.SelectNodes("//KeyViewerConfigurations/KVConfiguration");
@@ -255,6 +263,38 @@ namespace ADOFAI.AgentKeyViewer
                 error = "XML 解析失败: " + ex.Message;
                 return false;
             }
+        }
+
+        /// <summary>校验 Sonnet 新格式文档结构（Profiles/KvProfile/Keys/KvKey）</summary>
+        private static bool ValidateSonnetDocument(XmlDocument doc, out int keyCount, out string configName, out string error)
+        {
+            keyCount = 0;
+            configName = "";
+            error = "";
+            var profiles = doc.SelectNodes("//Profiles/KvProfile");
+            if (profiles == null || profiles.Count == 0)
+            {
+                // Kind=node/nodes 的组件包只含 Nodes/KvKey
+                var looseNodes = doc.SelectNodes("//Nodes/KvKey");
+                keyCount = looseNodes?.Count ?? 0;
+                if (keyCount == 0)
+                {
+                    error = "未找到 <KvProfile> 或 <KvKey>";
+                    return false;
+                }
+                configName = "KV 组件";
+                return true;
+            }
+            var profile = profiles[0];
+            configName = GetString(profile, "Name", "未命名配置");
+            var keys = profile.SelectNodes("Keys/KvKey");
+            keyCount = keys?.Count ?? 0;
+            if (keyCount == 0)
+            {
+                error = "KvProfile 中没有 <KvKey> 按键";
+                return false;
+            }
+            return true;
         }
 
         /// <summary>
@@ -341,12 +381,12 @@ namespace ADOFAI.AgentKeyViewer
                 SetCfgFloat(cfg, "KeyRainWidthRatio1", 1f);
                 SetCfgFloat(cfg, "KeyRainWidthRatio2", 0.7f);
 
-                Main.ModEntry?.Logger.Log($"[AIConfig] 两排键雨兜底修正: YOffsetRow1={row1Off}, YOffsetRow2={row2Off} (upBottom={upBottom}, lowBottom={lowBottom}), 逐键自定义雨已应用(上排=各自边框色, 下排=白色)");
+                CoreEntry.ModEntry?.Logger.Log($"[AIConfig] 两排键雨兜底修正: YOffsetRow1={row1Off}, YOffsetRow2={row2Off} (upBottom={upBottom}, lowBottom={lowBottom}), 逐键自定义雨已应用(上排=各自边框色, 下排=白色)");
                 return doc.OuterXml;
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[AIConfig] FixTwoRowRainLayout 失败: {ex.Message}（保留原始 XML）");
+                CoreEntry.ModEntry?.Logger.Error($"[AIConfig] FixTwoRowRainLayout 失败: {ex.Message}（保留原始 XML）");
                 return xml;
             }
         }
@@ -455,15 +495,381 @@ namespace ADOFAI.AgentKeyViewer
                     WriteEntry(zip, "KeyViewer.xml", doc.OuterXml);
                     WriteEntry(zip, "PackageInfo.xml", BuildMinimalPackageInfoXml());
                 }
-                Main.ModEntry?.Logger.Log($"[CtKvIo] 已直出 CT KV 包: {filePath}（{keys} 键）");
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 已直出 CT KV 包: {filePath}（{keys} 键）");
                 return filePath;
             }
             catch (Exception ex)
             {
                 error = ex.Message;
-                Main.ModEntry?.Logger.Error($"[CtKvIo] 直出 .ctkv 失败: {ex}");
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 直出 .ctkv 失败: {ex}");
                 return null;
             }
+        }
+
+        // ====================================================================
+        //  Sonnet 新格式：解析 / 兜底修正 / 导出
+        // ====================================================================
+
+        /// <summary>把 Sonnet 新格式 XML 反序列化为强类型包对象（同时起到结构校验作用）</summary>
+        public static KvTransferPackage ParseSonnetXml(string xml, out string error)
+        {
+            error = "";
+            try
+            {
+                var serializer = new System.Xml.Serialization.XmlSerializer(typeof(KvTransferPackage));
+                using (var reader = new System.IO.StringReader(xml))
+                    return serializer.Deserialize(reader) as KvTransferPackage;
+            }
+            catch (Exception ex)
+            {
+                error = "Sonnet XML 反序列化失败: " + ex.Message;
+                return null;
+            }
+        }
+
+        /// <summary>把 Sonnet 包对象序列化为 XML 字符串（用于预览/展示）</summary>
+        public static string SerializeSonnetPackage(KvTransferPackage pkg)
+        {
+            var serializer = new System.Xml.Serialization.XmlSerializer(typeof(KvTransferPackage));
+            using (var ms = new MemoryStream())
+            {
+                serializer.Serialize(ms, pkg);
+                return new UTF8Encoding(false).GetString(ms.ToArray()).TrimStart('\uFEFF');
+            }
+        }
+
+        /// <summary>把 Overlayer 包对象序列化为 XML 字符串（用于预览/展示）</summary>
+        public static string SerializeOvPackage(OvTransferPackage pkg)
+        {
+            var serializer = new System.Xml.Serialization.XmlSerializer(typeof(OvTransferPackage));
+            using (var ms = new MemoryStream())
+            {
+                serializer.Serialize(ms, pkg);
+                return new UTF8Encoding(false).GetString(ms.ToArray()).TrimStart('\uFEFF');
+            }
+        }
+
+        /// <summary>
+        /// 程序化兜底（对象级）：检测两排布局并修正键雨对齐。
+        /// 新格式坐标约定与旧格式不同，注意：
+        ///   - KvKey.PositionX/Y 是按键<b>中心</b>且 <b>Y 轴取反</b>，因此 PositionY 越大越靠上；
+        ///   - 键底Y（新坐标）= PositionY − Height/2；
+        ///   - RainRow 语义为 <b>1=上排 / 2=下排</b>；
+        ///   - 偏移量与旧格式同值直传（与 CT 的 ConvertLegacy 一致，不取反）：
+        ///       RainYOffset2 = (上排底Y − 下排底Y) + RainYOffset
+        /// </summary>
+        public static void FixSonnetRainLayout(KvTransferPackage pkg)
+        {
+            if (pkg?.Profiles == null) return;
+            foreach (var profile in pkg.Profiles)
+            {
+                if (profile?.Keys == null || profile.Keys.Count == 0) continue;
+
+                // KPS 数值左对齐(0)、Total 数值右对齐(2)
+                foreach (var k in profile.Keys)
+                {
+                    if (k.NodeType == 1) k.CountAlignment = 0;
+                    else if (k.NodeType == 2) k.CountAlignment = 2;
+                }
+
+                // 按 PositionY 分组：新格式 Y 越大越靠上
+                var byY = new SortedDictionary<float, List<KvKey>>(
+                    Comparer<float>.Create((a, b) => b.CompareTo(a))); // 降序：上排在前
+                foreach (var k in profile.Keys)
+                {
+                    if (!byY.TryGetValue(k.PositionY, out var list)) { list = new List<KvKey>(); byY[k.PositionY] = list; }
+                    list.Add(k);
+                }
+                if (byY.Count < 2) continue;
+
+                var ys = new List<float>(byY.Keys);
+                var upper = byY[ys[0]];
+                var lower = byY[ys[1]];
+
+                float BottomOf(KvKey k) => k.PositionY - (k.Height > 0f ? k.Height : profile.KeyHeight) * 0.5f;
+
+                float row1Off = profile.RainYOffset;
+                float row2Off = (BottomOf(upper[0]) - BottomOf(lower[0])) + row1Off;
+                profile.RainYOffset = row1Off;
+                profile.RainYOffset2 = row2Off;
+                if (profile.RainWidthRatio <= 0f) profile.RainWidthRatio = 1f;
+                if (profile.RainWidthRatio2 <= 0f) profile.RainWidthRatio2 = 0.7f;
+
+                // 逐键雨：上排跟随各自边框色，下排固定白色且更细
+                foreach (var k in upper)
+                {
+                    k.RainEnabled = profile.RainEnabled;
+                    k.RainRow = 1;
+                    k.UseCustomRain = true;
+                    k.RainColor = Clone4(k.BorderNormal, new[] { 1f, 1f, 1f, 1f });
+                    k.RainEndColor = new[] { k.RainColor[0], k.RainColor[1], k.RainColor[2], 0.08f };
+                    k.RainRightColor = Clone4(k.RainColor, new[] { 1f, 1f, 1f, 1f });
+                    k.RainYOffset = row1Off;
+                    k.RainWidthRatio = profile.RainWidthRatio;
+                }
+                foreach (var k in lower)
+                {
+                    k.RainEnabled = profile.RainEnabled;
+                    k.RainRow = 2;
+                    k.UseCustomRain = true;
+                    k.RainColor = new[] { 1f, 1f, 1f, 1f };
+                    k.RainEndColor = new[] { 1f, 1f, 1f, 0.08f };
+                    k.RainRightColor = new[] { 1f, 1f, 1f, 1f };
+                    k.RainYOffset = row2Off;
+                    k.RainWidthRatio = profile.RainWidthRatio2;
+                }
+
+                // 行级配置同步保留（无自定义雨的键的回退）
+                if (upper[0].BorderNormal != null) profile.RainColor = Clone4(upper[0].BorderNormal, profile.RainColor);
+                profile.RainColor2 = new[] { 1f, 1f, 1f, 1f };
+
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] Sonnet 两排键雨兜底: RainYOffset={row1Off}, RainYOffset2={row2Off}, 逐键自定义雨已应用");
+            }
+        }
+
+        private static float[] Clone4(float[] src, float[] fallback)
+            => src != null && src.Length >= 4 ? new[] { src[0], src[1], src[2], src[3] } : fallback;
+
+        /// <summary>把意图规格构建为 Sonnet 新格式 .ctkv 并保存（条目 KeyViewer.Sonnet.xml）</summary>
+        public static string SaveSonnetCtkvFromConfig(KVConfig cfg, string fileName, UnityModManager.ModEntry modEntry, out string error)
+        {
+            byte[] bytes;
+            try
+            {
+                bytes = KvSpecBuilder.BuildSonnetXmlBytes(cfg);
+            }
+            catch (Exception ex)
+            {
+                error = "构建 Sonnet 包失败: " + ex.Message;
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] {error}");
+                return null;
+            }
+            return SavePackage(fileName, ".ctkv", "KeyViewer.Sonnet.xml", bytes, cfg?.name, modEntry, out error);
+        }
+
+        /// <summary>把 AI 直写的 Sonnet XML 保存为 .ctkv（会先做键雨兜底修正）</summary>
+        public static string SaveSonnetCtkvFromXml(string xml, string fileName, UnityModManager.ModEntry modEntry, out string error)
+        {
+            error = "";
+            var pkg = ParseSonnetXml(xml, out error);
+            if (pkg == null) return null;
+            FixSonnetRainLayout(pkg);
+
+            byte[] bytes;
+            try
+            {
+                var serializer = new System.Xml.Serialization.XmlSerializer(typeof(KvTransferPackage));
+                using (var ms = new MemoryStream())
+                {
+                    serializer.Serialize(ms, pkg);
+                    bytes = ms.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                error = "序列化 Sonnet 包失败: " + ex.Message;
+                return null;
+            }
+            string name = pkg.Profiles != null && pkg.Profiles.Count > 0 ? pkg.Profiles[0].Name : null;
+            return SavePackage(fileName, ".ctkv", "KeyViewer.Sonnet.xml", bytes, name, modEntry, out error);
+        }
+
+        /// <summary>把意图规格构建为旧格式 .ctkv 并保存（条目 KeyViewer.xml + PackageInfo.xml）</summary>
+        public static string SaveLegacyCtkvFromConfig(KVConfig cfg, string fileName, UnityModManager.ModEntry modEntry, out string error)
+        {
+            error = "";
+            try
+            {
+                string xml = KvSpecBuilder.BuildLegacyXml(cfg);
+                var dir = GetCtkvDir(modEntry);
+                string filePath = ResolvePackagePath(dir, fileName, ".ctkv", cfg?.name);
+                if (File.Exists(filePath)) File.Delete(filePath);
+                using (var zip = ZipFile.Open(filePath, ZipArchiveMode.Create))
+                {
+                    WriteEntry(zip, "KeyViewer.xml", xml);
+                    WriteEntry(zip, "PackageInfo.xml", BuildMinimalPackageInfoXml());
+                }
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 已导出旧格式 KV 包: {filePath}（{cfg?.keys?.Count ?? 0} 键）");
+                return filePath;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 旧格式导出失败: {ex}");
+                return null;
+            }
+        }
+
+        /// <summary>保存 Overlayer(.ctov) 包（条目 Overlayer.Sonnet.xml）</summary>
+        public static string SaveOvPackage(OvTransferPackage pkg, string fileName, UnityModManager.ModEntry modEntry, out string error)
+        {
+            error = "";
+            byte[] bytes;
+            try
+            {
+                var serializer = new System.Xml.Serialization.XmlSerializer(typeof(OvTransferPackage));
+                using (var ms = new MemoryStream())
+                {
+                    serializer.Serialize(ms, pkg);
+                    bytes = ms.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                error = "序列化 Overlayer 包失败: " + ex.Message;
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] {error}");
+                return null;
+            }
+            return SavePackage(fileName, ".ctov", "Overlayer.Sonnet.xml", bytes, null, modEntry, out error);
+        }
+
+        /// <summary>
+        /// CT Overlayer 模块的设置文件路径：
+        /// &lt;游戏目录&gt;/Mods/CheryTools/Modules/CheryTools.Overlayer.Preview.xml
+        /// </summary>
+        public static string GetCtOverlayerSettingsPath(UnityModManager.ModEntry modEntry)
+        {
+            var gameRoot = ModPathHelper.GetGameDir(modEntry);
+            return Path.Combine(gameRoot, "Mods", "CheryTools", "Modules", "CheryTools.Overlayer.Preview.xml");
+        }
+
+        /// <summary>
+        /// 把 Overlayer 生成结果导出为 CT 的 Overlayer <b>设置文件</b>（而非 .ctov 包）。
+        ///
+        /// 用于绕过 CT 的导入 Bug：CT 的「导入 .ctov」会因 XmlReaderSettings.DtdProcessing
+        /// 在当前 Unity 运行时无法解析而必挂，但它的设置文件读取走 XmlSerializer Stream 重载，不受影响。
+        /// 用户需在<b>关闭游戏</b>后把导出的文件覆盖到 <see cref="GetCtOverlayerSettingsPath"/> 再启动游戏。
+        /// </summary>
+        public static string SaveOvSettingsFile(OvTransferPackage pkg, string fileName,
+            UnityModManager.ModEntry modEntry, out string error)
+        {
+            error = "";
+            if (pkg == null)
+            {
+                error = "没有可导出的 Overlayer 结果";
+                return null;
+            }
+            try
+            {
+                // 以 CT 现有设置为基底做「追加合并」，避免整体替换把用户已有的覆盖物清掉。
+                // 与 CT 自身 MergeIntoSettings 的行为一致：同名组件自动改名后追加。
+                var settings = LoadExistingOvSettings() ?? new OvSettingsFile();
+
+                var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var t in settings.Texts) if (!string.IsNullOrEmpty(t?.Name)) used.Add(t.Name);
+                foreach (var i in settings.Images) if (!string.IsNullOrEmpty(i?.Name)) used.Add(i.Name);
+                foreach (var v in settings.Videos) if (!string.IsNullOrEmpty(v?.Name)) used.Add(v.Name);
+                foreach (var b in settings.ProgressBars) if (!string.IsNullOrEmpty(b?.Name)) used.Add(b.Name);
+
+                int added = 0;
+                if (pkg.Texts != null)
+                    foreach (var t in pkg.Texts) { if (t == null) continue; t.Name = UniqueName(t.Name, used); settings.Texts.Add(t); added++; }
+                if (pkg.Images != null)
+                    foreach (var i in pkg.Images) { if (i == null) continue; i.Name = UniqueName(i.Name, used); settings.Images.Add(i); added++; }
+                if (pkg.Videos != null)
+                    foreach (var v in pkg.Videos) { if (v == null) continue; v.Name = UniqueName(v.Name, used); settings.Videos.Add(v); added++; }
+                if (pkg.ProgressBars != null)
+                    foreach (var b in pkg.ProgressBars) { if (b == null) continue; b.Name = UniqueName(b.Name, used); settings.ProgressBars.Add(b); added++; }
+
+                settings.Enabled = true;
+                // CT 会把该值夹在 15~360 之间
+                if (settings.DataUpdateRate < 15f || settings.DataUpdateRate > 360f) settings.DataUpdateRate = 60f;
+
+                var serializer = new System.Xml.Serialization.XmlSerializer(typeof(OvSettingsFile));
+                byte[] bytes;
+                using (var ms = new MemoryStream())
+                {
+                    serializer.Serialize(ms, settings);
+                    bytes = ms.ToArray();
+                }
+
+                var dir = GetCtkvDir(modEntry);
+                string filePath = ResolvePackagePath(dir, fileName, ".OvSettings.xml", "Overlayer设置");
+                File.WriteAllBytes(filePath, bytes);
+
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 已导出 CT Overlayer 设置文件: {filePath}（新增 {added} 个组件，合并后共 {settings.Texts.Count + settings.Images.Count + settings.Videos.Count + settings.ProgressBars.Count} 个）");
+                return filePath;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 导出 CT Overlayer 设置文件失败: {ex}");
+                return null;
+            }
+        }
+
+        /// <summary>读取 CT 现有的 Overlayer 设置文件（不存在或解析失败返回 null）</summary>
+        private static OvSettingsFile LoadExistingOvSettings()
+        {
+            try
+            {
+                string path = GetCtOverlayerSettingsPath(CoreEntry.ModEntry);
+                if (!File.Exists(path)) return null;
+                var serializer = new System.Xml.Serialization.XmlSerializer(typeof(OvSettingsFile));
+                using (var fs = File.OpenRead(path))
+                    return serializer.Deserialize(fs) as OvSettingsFile;
+            }
+            catch (Exception ex)
+            {
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 读取现有 CT Overlayer 设置失败（将作为新建处理）: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>名称去重：同名时依次尝试「名称 (2)」「名称 (3)」…（对齐 CT 的 UniqueName）</summary>
+        private static string UniqueName(string name, HashSet<string> used)
+        {
+            if (string.IsNullOrWhiteSpace(name)) name = "组件";
+            name = name.Trim();
+            if (used.Add(name)) return name;
+            for (int i = 2; i < 1000; i++)
+            {
+                string candidate = $"{name} ({i})";
+                if (used.Add(candidate)) return candidate;
+            }
+            string fallback = name + " " + Guid.NewGuid().ToString("N").Substring(0, 4);
+            used.Add(fallback);
+            return fallback;
+        }
+
+        /// <summary>通用包保存：写入指定清单条目名的 ZIP</summary>
+        private static string SavePackage(string fileName, string extension, string manifestEntry,
+            byte[] content, string fallbackName, UnityModManager.ModEntry modEntry, out string error)
+        {
+            error = "";
+            try
+            {
+                var dir = GetCtkvDir(modEntry);
+                string filePath = ResolvePackagePath(dir, fileName, extension, fallbackName);
+                if (File.Exists(filePath)) File.Delete(filePath);
+                using (var zip = ZipFile.Open(filePath, ZipArchiveMode.Create))
+                    WriteEntryBytes(zip, manifestEntry, content);
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 已导出包: {filePath}（条目 {manifestEntry}）");
+                return filePath;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 导出包失败: {ex}");
+                return null;
+            }
+        }
+
+        /// <summary>补扩展名、清洗非法文件名字符，返回完整路径</summary>
+        private static string ResolvePackagePath(string dir, string fileName, string extension, string fallbackName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) fileName = fallbackName;
+            if (string.IsNullOrWhiteSpace(fileName)) fileName = "AI生成配置";
+            if (!fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) fileName += extension;
+            foreach (char c in Path.GetInvalidFileNameChars()) fileName = fileName.Replace(c, '_');
+            return Path.Combine(dir, fileName);
+        }
+
+        private static void WriteEntryBytes(ZipArchive zip, string name, byte[] content)
+        {
+            var entry = zip.CreateEntry(name, System.IO.Compression.CompressionLevel.Optimal);
+            using (var s = entry.Open())
+                s.Write(content, 0, content.Length);
         }
 
         /// <summary>
@@ -476,11 +882,28 @@ namespace ADOFAI.AgentKeyViewer
             error = "";
             try
             {
+                // 优先处理 Sonnet 新格式包
+                string sonnetXml = ReadEntryFromZip(filePath, "KeyViewer.Sonnet.xml");
+                if (!string.IsNullOrEmpty(sonnetXml))
+                {
+                    var pkg = ParseSonnetXml(sonnetXml, out error);
+                    if (pkg == null) return false;
+                    FixSonnetRainLayout(pkg);
+                    var sonnetSerializer = new System.Xml.Serialization.XmlSerializer(typeof(KvTransferPackage));
+                    byte[] sonnetBytes;
+                    using (var ms = new MemoryStream())
+                    {
+                        sonnetSerializer.Serialize(ms, pkg);
+                        sonnetBytes = ms.ToArray();
+                    }
+                    return RewriteZipEntry(filePath, "KeyViewer.Sonnet.xml", sonnetBytes, out error);
+                }
+
                 string xml = ReadEntryFromZip(filePath, "KeyViewer.xml")
                           ?? ReadEntryFromZip(filePath, "Settings.xml");
                 if (string.IsNullOrEmpty(xml))
                 {
-                    error = "压缩包内未找到 KeyViewer.xml / Settings.xml";
+                    error = "压缩包内未找到 KeyViewer.Sonnet.xml / KeyViewer.xml / Settings.xml";
                     return false;
                 }
                 if (!ValidateGeneratedXml(xml, out _, out _, out error)) return false;
@@ -512,13 +935,53 @@ namespace ADOFAI.AgentKeyViewer
                 File.Delete(filePath);
                 File.Move(tmp, filePath);
 
-                Main.ModEntry?.Logger.Log($"[CtKvIo] 键雨就地修正完成: {filePath}");
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 键雨就地修正完成: {filePath}");
                 return true;
             }
             catch (Exception ex)
             {
                 error = ex.Message;
-                Main.ModEntry?.Logger.Error($"[CtKvIo] 键雨就地修正失败: {ex}");
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 键雨就地修正失败: {ex}");
+                return false;
+            }
+        }
+
+        /// <summary>用新内容替换 ZIP 内指定条目，其余条目原样复制（先写临时文件再替换）</summary>
+        private static bool RewriteZipEntry(string filePath, string entryName, byte[] content, out string error)
+        {
+            error = "";
+            try
+            {
+                string tmp = filePath + ".tmp";
+                using (var src = ZipFile.OpenRead(filePath))
+                using (var dst = ZipFile.Open(tmp, ZipArchiveMode.Create))
+                {
+                    bool written = false;
+                    foreach (var entry in src.Entries)
+                    {
+                        if (entry.FullName == entryName && !written)
+                        {
+                            WriteEntryBytes(dst, entryName, content);
+                            written = true;
+                            continue;
+                        }
+                        var ne = dst.CreateEntry(entry.FullName);
+                        using (var s = entry.Open())
+                        using (var d = ne.Open())
+                            s.CopyTo(d);
+                    }
+                    if (!written) WriteEntryBytes(dst, entryName, content);
+                }
+                File.Delete(filePath);
+                File.Move(tmp, filePath);
+
+                CoreEntry.ModEntry?.Logger.Log($"[CtKvIo] 键雨就地修正完成: {filePath}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 键雨就地修正失败: {ex}");
                 return false;
             }
         }
@@ -695,6 +1158,20 @@ namespace ADOFAI.AgentKeyViewer
         // ====================================================================
         //  工具方法
         // ====================================================================
+
+        /// <summary>读取 ZIP 内指定条目的文本内容（供 WebUI 预览用；条目不存在返回 null）</summary>
+        public static string ReadEntryText(string filePath, string entryName)
+        {
+            try
+            {
+                return File.Exists(filePath) ? ReadEntryFromZip(filePath, entryName) : null;
+            }
+            catch (Exception ex)
+            {
+                CoreEntry.ModEntry?.Logger.Error($"[CtKvIo] 读取条目失败 {filePath}/{entryName}: {ex.Message}");
+                return null;
+            }
+        }
 
         private static string ReadEntryFromZip(string filePath, string entryName)
         {

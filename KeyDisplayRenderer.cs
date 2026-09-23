@@ -46,7 +46,7 @@ namespace ADOFAI.AgentKeyViewer
             // 在 OnToggle（OnGUI 之外）调用会抛 "You can only call GUI functions from inside OnGUI"。
             // 样式统一在 OnGUI() 开头懒创建。
             RebuildLayout();
-            Main.ModEntry?.Logger.Log("[KeyDisplayRenderer] Enabled (CT+FreeMake style + Rain)");
+            CoreEntry.ModEntry?.Logger.Log("[KeyDisplayRenderer] Enabled (CT+FreeMake style + Rain)");
         }
 
         public void Disable()
@@ -54,7 +54,7 @@ namespace ADOFAI.AgentKeyViewer
             _isEnabled = false;
             _isDraggingPanel = false;
             _rainDrops.Clear();
-            Main.ModEntry?.Logger.Log("[KeyDisplayRenderer] Disabled");
+            CoreEntry.ModEntry?.Logger.Log("[KeyDisplayRenderer] Disabled");
         }
 
         /// <summary>清空键雨（关闭键雨或切换布局时调用）</summary>
@@ -69,7 +69,7 @@ namespace ADOFAI.AgentKeyViewer
         public void RebuildLayout()
         {
             KeyDefinition[] keys;
-            var s = Main.Settings;
+            var s = CoreEntry.Settings;
             switch (s.LayoutType)
             {
                 case 0: keys = KeyLayoutPresets.Create4KLayout(); break;
@@ -117,19 +117,19 @@ namespace ADOFAI.AgentKeyViewer
 
             CurrentLayout = new List<KeyDefinition>(keys);
             _rainDrops.Clear();
-            Main.ModEntry?.Logger.Log($"[KeyDisplayRenderer] Layout rebuilt: layoutType={s.LayoutType}, keys={CurrentLayout.Count}");
+            CoreEntry.ModEntry?.Logger.Log($"[KeyDisplayRenderer] Layout rebuilt: layoutType={s.LayoutType}, keys={CurrentLayout.Count}");
         }
 
         /// <summary>把当前CustomKeys同步回CurrentLayout，不丢失运行时hitCount等</summary>
         public void SyncCustomKeysToLayout()
         {
-            if (Main.Settings.LayoutType != 5 || Main.Settings.CustomKeys == null) return;
+            if (CoreEntry.Settings.LayoutType != 5 || CoreEntry.Settings.CustomKeys == null) return;
             // 保留每个已存在键的HitCount / Animation状态
             var oldHits = new Dictionary<string, int>();
             if (CurrentLayout != null)
                 foreach (var k in CurrentLayout) oldHits[k.Id] = k.HitCount;
 
-            CurrentLayout = new List<KeyDefinition>(Main.Settings.CustomKeys);
+            CurrentLayout = new List<KeyDefinition>(CoreEntry.Settings.CustomKeys);
             foreach (var k in CurrentLayout)
                 if (oldHits.TryGetValue(k.Id, out var h)) k.HitCount = h;
         }
@@ -185,16 +185,16 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         public void Update()
         {
-            if (!_isEnabled || !Main.Settings.ShowKeyDisplay) return;
+            if (!_isEnabled || !CoreEntry.Settings.ShowKeyDisplay) return;
             if (CurrentLayout == null) return;
 
-            float originX = Main.Settings.DisplayX;
-            float originY = Main.Settings.DisplayY;
-            float scale = Main.Settings.Scale;
+            float originX = CoreEntry.Settings.DisplayX;
+            float originY = CoreEntry.Settings.DisplayY;
+            float scale = CoreEntry.Settings.Scale;
 
             // 1. 键雨（CT风格）：按下→生成，按住→持续增长，松开→停止增长并向上飞行
             //    图片模式键（DisplayMode==1）不生成键雨，只显示图片。
-            if (Main.Settings.EnableRain)
+            if (CoreEntry.Settings.EnableRain)
             {
                 for (int i = 0; i < CurrentLayout.Count; i++)
                 {
@@ -237,7 +237,7 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         private void UpdateGifAnimations(float dt)
         {
-            if (!Main.Settings.EnableKeyImages) return;
+            if (!CoreEntry.Settings.EnableKeyImages) return;
             if (CurrentLayout == null || CurrentLayout.Count == 0) return;
 
             var active = new HashSet<string>();
@@ -290,15 +290,15 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         public void OnGUI()
         {
-            if (!_isEnabled || !Main.Settings.ShowKeyDisplay) return;
+            if (!_isEnabled || !CoreEntry.Settings.ShowKeyDisplay) return;
             if (CurrentLayout == null || CurrentLayout.Count == 0) RebuildLayout();
             EnsureStyles();
 
-            float originX = Main.Settings.DisplayX;
-            float originY = Main.Settings.DisplayY;
-            float scale = Main.Settings.Scale;
-            float opacity = Main.Settings.Opacity;
-            float padding = Main.Settings.PanelPadding * scale;
+            float originX = CoreEntry.Settings.DisplayX;
+            float originY = CoreEntry.Settings.DisplayY;
+            float scale = CoreEntry.Settings.Scale;
+            float opacity = CoreEntry.Settings.Opacity;
+            float padding = CoreEntry.Settings.PanelPadding * scale;
 
             // 1. 计算面板整体包围盒（用于面板拖拽命中 + KPS定位）
             float layoutMaxX = 0, layoutMaxY = 0;
@@ -313,19 +313,19 @@ namespace ADOFAI.AgentKeyViewer
             float totalLayoutH = layoutMaxY * scale;
 
             float statsW = 0, statsGap = 0;
-            if (Main.Settings.ShowKpsTotal)
+            if (CoreEntry.Settings.ShowKpsTotal)
             {
-                statsW = Main.Settings.StatsBoxWidth * scale;
+                statsW = CoreEntry.Settings.StatsBoxWidth * scale;
                 statsGap = 12 * scale;
             }
-            float statsH = Main.Settings.StatsBoxHeight * scale;
+            float statsH = CoreEntry.Settings.StatsBoxHeight * scale;
             float panelTotalW = totalLayoutW + statsW + (statsW > 0 ? statsGap : 0) + padding * 2;
             float panelTotalH = Mathf.Max(totalLayoutH, (statsH * 2 + 8 * scale)) + padding * 2;
 
             Rect panelRect = new Rect(originX - padding, originY - padding, panelTotalW, panelTotalH);
 
             // 2. 处理面板拖动（Drag to move）
-            if (Main.Settings.EnablePanelDrag)
+            if (CoreEntry.Settings.EnablePanelDrag)
             {
                 Event e = Event.current;
                 if (e.isMouse)
@@ -334,7 +334,7 @@ namespace ADOFAI.AgentKeyViewer
                     {
                         _isDraggingPanel = true;
                         _dragStartMouse = e.mousePosition;
-                        _dragStartPosition = new Vector2(Main.Settings.DisplayX, Main.Settings.DisplayY);
+                        _dragStartPosition = new Vector2(CoreEntry.Settings.DisplayX, CoreEntry.Settings.DisplayY);
                         e.Use();
                     }
                     else if (e.type == EventType.MouseUp && e.button == 0)
@@ -344,23 +344,23 @@ namespace ADOFAI.AgentKeyViewer
                     else if (_isDraggingPanel && e.type == EventType.MouseDrag)
                     {
                         Vector2 delta = e.mousePosition - _dragStartMouse;
-                        Main.Settings.DisplayX = Mathf.Clamp(_dragStartPosition.x + delta.x, 0, Math.Max(0, Screen.width - 50));
-                        Main.Settings.DisplayY = Mathf.Clamp(_dragStartPosition.y + delta.y, 0, Math.Max(0, Screen.height - 50));
+                        CoreEntry.Settings.DisplayX = Mathf.Clamp(_dragStartPosition.x + delta.x, 0, Math.Max(0, Screen.width - 50));
+                        CoreEntry.Settings.DisplayY = Mathf.Clamp(_dragStartPosition.y + delta.y, 0, Math.Max(0, Screen.height - 50));
                         e.Use();
                     }
                 }
             }
 
             // 3. 可选：整个面板背景（半透明圆角），帮助拖动时可见
-            Color panelBg = Main.Settings.PanelBgColor;
+            Color panelBg = CoreEntry.Settings.PanelBgColor;
             panelBg.a *= opacity;
             GUI.color = panelBg;
-            if (Main.Settings.EnableRoundedCorners)
+            if (CoreEntry.Settings.EnableRoundedCorners)
             {
                 GUI.DrawTexture(panelRect, RoundedRectFactory.GetFilled(
                     Mathf.Max(1, Mathf.RoundToInt(panelTotalW)),
                     Mathf.Max(1, Mathf.RoundToInt(panelTotalH)),
-                    Mathf.RoundToInt(Main.Settings.PanelCornerRadius)));
+                    Mathf.RoundToInt(CoreEntry.Settings.PanelCornerRadius)));
             }
             else
             {
@@ -369,7 +369,7 @@ namespace ADOFAI.AgentKeyViewer
             GUI.color = Color.white;
 
             // 拖动小提示
-            if (_isDraggingPanel && Main.Settings.ShowDragHint)
+            if (_isDraggingPanel && CoreEntry.Settings.ShowDragHint)
             {
                 GUI.color = new Color(1, 1, 1, opacity);
                 GUI.Label(panelRect, "拖动中... 松开鼠标结束", _dragHintStyle);
@@ -388,7 +388,7 @@ namespace ADOFAI.AgentKeyViewer
             DrawRain(opacity);
 
             // 6. 绘制KPS和Total统计框
-            if (Main.Settings.ShowKpsTotal)
+            if (CoreEntry.Settings.ShowKpsTotal)
             {
                 DrawKpsTotalPanel(originX + totalLayoutW + statsGap, originY, scale, opacity);
             }
@@ -403,7 +403,7 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         private void DrawKeyBox(KeyDefinition key, float originX, float originY, float scale, float opacity)
         {
-            var s = Main.Settings;
+            var s = CoreEntry.Settings;
             float anim = Mathf.Clamp01(key.PressAnimation);
             bool imageMode = key.DisplayMode == 1;
 
@@ -605,24 +605,24 @@ namespace ADOFAI.AgentKeyViewer
         /// </summary>
         private void DrawKpsTotalPanel(float x, float y, float scale, float opacity)
         {
-            var s = Main.Settings;
+            var s = CoreEntry.Settings;
             float boxW = s.StatsBoxWidth * scale;
             float boxH = s.StatsBoxHeight * scale;
             float gap = 8 * scale;
 
             DrawStatBox(x, y, boxW, boxH, opacity, "KPS",
-                        Main.InputCapture != null ? Main.InputCapture.CurrentKps.ToString() : "0",
+                        CoreEntry.InputCapture != null ? CoreEntry.InputCapture.CurrentKps.ToString() : "0",
                         (Color)s.KpsTextColor);
 
             DrawStatBox(x, y + boxH + gap, boxW, boxH, opacity, "Total",
-                        Main.InputCapture != null ? Main.InputCapture.TotalHits.ToString() : "0",
+                        CoreEntry.InputCapture != null ? CoreEntry.InputCapture.TotalHits.ToString() : "0",
                         (Color)s.TotalTextColor);
         }
 
         private void DrawStatBox(float x, float y, float w, float h, float opacity,
                                  string label, string value, Color valueColor)
         {
-            var s = Main.Settings;
+            var s = CoreEntry.Settings;
             bool rounded = s.EnableRoundedCorners;
             int radius = Mathf.RoundToInt(s.StatsCornerRadius);
             int rw = Mathf.Max(1, Mathf.RoundToInt(w));
@@ -715,7 +715,7 @@ namespace ADOFAI.AgentKeyViewer
         /// <summary>生成一个键雨条（按下时调用）</summary>
         private RainDrop CreateRainDrop(KeyDefinition key, float originX, float originY, float scale)
         {
-            var s = Main.Settings;
+            var s = CoreEntry.Settings;
             if (!s.EnableRain) return null;
 
             // 解析该键的键雨参数：单键覆盖 > 排数设置 > 全局
@@ -823,8 +823,8 @@ namespace ADOFAI.AgentKeyViewer
             }
 
             // 性能上限：超过时丢弃最早的
-            if (_rainDrops.Count > Main.Settings.RainMaxDrops)
-                _rainDrops.RemoveRange(0, _rainDrops.Count - Main.Settings.RainMaxDrops);
+            if (_rainDrops.Count > CoreEntry.Settings.RainMaxDrops)
+                _rainDrops.RemoveRange(0, _rainDrops.Count - CoreEntry.Settings.RainMaxDrops);
         }
 
         /// <summary>绘制键雨</summary>

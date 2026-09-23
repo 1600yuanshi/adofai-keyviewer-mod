@@ -49,7 +49,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KeyImageManager] 创建图片文件夹失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KeyImageManager] 创建图片文件夹失败: {ex.Message}");
             }
         }
 
@@ -63,7 +63,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KeyImageManager] 打开文件夹失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KeyImageManager] 打开文件夹失败: {ex.Message}");
             }
         }
 
@@ -82,7 +82,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KeyImageManager] 扫描图片文件夹失败: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KeyImageManager] 扫描图片文件夹失败: {ex.Message}");
                 _scannedFiles = new string[0];
             }
             return _scannedFiles;
@@ -138,7 +138,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KeyImageManager] 加载图片失败 {fileName}: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KeyImageManager] 加载图片失败 {fileName}: {ex.Message}");
                 result = null;
             }
 
@@ -232,7 +232,7 @@ namespace ADOFAI.AgentKeyViewer
             }
             catch (Exception ex)
             {
-                Main.ModEntry?.Logger.Error($"[KeyImageManager] System.Drawing 加载失败 {path}: {ex.Message}");
+                CoreEntry.ModEntry?.Logger.Error($"[KeyImageManager] System.Drawing 加载失败 {path}: {ex.Message}");
                 return null;
             }
         }
